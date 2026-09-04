@@ -36,8 +36,14 @@ jobs:
             platform: linux-x64
           - os: windows-latest
             platform: windows-x64
-          # Intel Macs and Apple Silicon need separate builds; a runtime is native code.
-          - os: macos-13
+          # Intel Macs and Apple Silicon need separate builds; a runtime is native code,
+          # and an Apple Silicon build will not run on an Intel Mac at all. Both are kept
+          # so that a student on an older Mac is not left out.
+          #
+          # The Intel runner is macos-15-intel: the macos-13 image it replaces no longer
+          # picks up jobs, and a job asking for it waits without ever being given a
+          # machine.
+          - os: macos-15-intel
             platform: macos-x64
           - os: macos-14
             platform: macos-arm64
