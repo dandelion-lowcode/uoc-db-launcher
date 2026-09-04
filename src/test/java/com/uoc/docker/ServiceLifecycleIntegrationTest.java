@@ -40,7 +40,8 @@ class ServiceLifecycleIntegrationTest extends DockerIntegrationTestBase {
 
         // The statuses are collected as they are decided rather than on the interface
         // thread, so the test can read them directly.
-        manager = new DockerManager(dockerClient(), new SystemProcessRunner(), Runnable::run);
+        manager = new DockerManager(dockerClient(), new SystemProcessRunner(), Runnable::run,
+                COMPOSE_FILE);
         manager.setListener((key, status) -> {
             if (key.equals(SERVICE.key())) {
                 seen.add(status);

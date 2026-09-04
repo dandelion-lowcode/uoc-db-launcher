@@ -2,6 +2,8 @@ package com.uoc.docker;
 
 import org.junit.jupiter.api.Tag;
 
+import java.io.IOException;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -27,6 +29,21 @@ abstract class DockerIntegrationTestBase {
     private static final Duration POLL = Duration.ofSeconds(2);
 
     private static final ProcessRunner PROCESS = new SystemProcessRunner();
+
+    /**
+     * The compose file, unpacked exactly the way the application unpacks it. These tests
+     * go through the same installation the students do, so that a file left out of the
+     * bundle fails here rather than on their machines.
+     */
+    static final Path COMPOSE_FILE = installBundledFiles();
+
+    private static Path installBundledFiles() {
+        try {
+            return BundledFiles.inUserDataDirectory().install();
+        } catch (IOException e) {
+            throw new IllegalStateException("Could not install the bundled Docker files", e);
+        }
+    }
 
     static void assumeDockerIsRunning() {
         assumeTrue(DockerAvailability.isRunning(),
@@ -97,7 +114,7 @@ abstract class DockerIntegrationTestBase {
 
     private static void compose(String... arguments) {
         List<String> command = new java.util.ArrayList<>(List.of(
-                DockerCommand.EXECUTABLE, DockerCommand.COMPOSE, "-f", DockerCommand.COMPOSE_FILE));
+                DockerCommand.EXECUTABLE, DockerCommand.COMPOSE, "-f", COMPOSE_FILE.toString()));
         command.addAll(List.of(arguments));
 
         ProcessRunner.Result result = PROCESS.run(command, null);

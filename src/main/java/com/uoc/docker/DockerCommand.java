@@ -10,10 +10,12 @@ public final class DockerCommand {
     public static final String EXECUTABLE = "docker";
     public static final String COMPOSE = "compose";
     /**
-     * Where the services are described. The path is relative to where the application is
-     * run from, which is the project root while it is run from source.
+     * The compose file's name inside the directory it is unpacked into. Nothing should
+     * build a path from this: ask {@link BundledFiles} where the file actually is, since
+     * an installed application keeps it under the user's own data directory rather than
+     * anywhere near the working directory it happens to be started from.
      */
-    public static final String COMPOSE_FILE = "docker/docker-compose.yml";
+    public static final String COMPOSE_FILE_NAME = "docker-compose.yml";
     public static final String CONTAINER_PREFIX = "uocdb-";
 
     private DockerCommand() {

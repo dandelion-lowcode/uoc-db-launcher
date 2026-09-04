@@ -12,7 +12,12 @@ import com.github.dockerjava.core.DockerClientImpl;
 import com.github.dockerjava.transport.DockerHttpClient;
 import com.github.dockerjava.zerodep.ZerodepDockerHttpClient;
 
+import com.uoc.platform.UserDataDirectory;
+
 import javax.swing.SwingUtilities;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -35,20 +40,45 @@ public class DockerManager {
     private final ExecutorService executor = Executors.newCachedThreadPool();
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
     private final ServiceStatusReporter reporter;
+    private final Path composeFile;
     private volatile boolean closed;
 
     public DockerManager() {
-        this(defaultClient(), new SystemProcessRunner(), SwingUtilities::invokeLater);
+        this(defaultClient(), new SystemProcessRunner(), SwingUtilities::invokeLater,
+                installBundledFiles());
     }
 
     /**
      * Lets a test watch the statuses as they are decided, by delivering them where it can
-     * see them rather than on the interface thread.
+     * see them rather than on the interface thread, and point Docker at a compose file of
+     * its own choosing.
      */
-    DockerManager(DockerClient client, ProcessRunner processRunner, Consumer<Runnable> dispatcher) {
+    DockerManager(DockerClient client, ProcessRunner processRunner, Consumer<Runnable> dispatcher,
+            Path composeFile) {
         this.client = client;
         this.processRunner = processRunner;
         this.reporter = new ServiceStatusReporter(dispatcher);
+        this.composeFile = composeFile;
+    }
+
+    /**
+     * Writes the service definitions somewhere Docker can read them, which an installed
+     * application has to do before it can start anything at all.
+     *
+     * <p>
+     * A failure here is not recoverable: without these files there is no service to
+     * start, so it is raised rather than quietly leaving every database unreachable for
+     * reasons the student cannot see.
+     */
+    private static Path installBundledFiles() {
+        try {
+            return BundledFiles.inUserDataDirectory().install();
+        } catch (IOException e) {
+            throw new UncheckedIOException(
+                    "The launcher could not write the files Docker needs into "
+                            + UserDataDirectory.current() + ".",
+                    e);
+        }
     }
 
     private static DockerClient defaultClient() {
@@ -191,7 +221,7 @@ public class DockerManager {
         reporter.report(key, inProgressStatus);
         try {
             List<String> command = new ArrayList<>(List.of(DockerCommand.EXECUTABLE,
-                    DockerCommand.COMPOSE, "-f", DockerCommand.COMPOSE_FILE));
+                    DockerCommand.COMPOSE, "-f", composeFile.toString()));
             command.addAll(List.of(composeArgs));
             command.add(key);
 

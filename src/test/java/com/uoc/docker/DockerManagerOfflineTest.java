@@ -9,6 +9,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -44,7 +45,8 @@ class DockerManagerOfflineTest {
     }
 
     private DockerManager managerFor(ProcessRunner processRunner) {
-        manager = new DockerManager(unreachableClient(), processRunner, Runnable::run);
+        manager = new DockerManager(unreachableClient(), processRunner, Runnable::run,
+                Path.of("docker-compose.yml"));
         manager.setListener((key, status) -> seen.add(status));
         return manager;
     }
