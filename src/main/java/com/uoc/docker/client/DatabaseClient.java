@@ -60,6 +60,10 @@ public sealed interface DatabaseClient
             case NEO4J, NEO4J_TWITTER -> new CypherShellClient();
             case REDIS -> new RedisCliClient();
             case RIAK -> new RiakHttpClient();
+            // Jupyter is worked on in a browser; nothing here can drive it, and asking
+            // for a client is a mistake in the caller rather than something to guess at.
+            case JUPYTER -> throw new IllegalArgumentException(
+                    database.displayName() + " is not queried from a console");
         };
     }
 }

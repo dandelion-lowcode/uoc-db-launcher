@@ -65,10 +65,11 @@ class RiakHttpClientTest {
     @Test
     void onlyRiakUsesStandardInput() {
         for (Database database : Database.values()) {
-            DatabaseClient other = DatabaseClient.of(database);
-            if (database == Database.RIAK) {
+            // Jupyter has no client at all: it is opened in a browser.
+            if (database == Database.RIAK || !database.hasQueryConsole()) {
                 continue;
             }
+            DatabaseClient other = DatabaseClient.of(database);
             assertNull(other.stdin("query"), database + " should pass its query as arguments");
             assertTrue(other.usesTerminal(), database + " should keep its colours");
         }

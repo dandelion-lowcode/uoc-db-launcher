@@ -16,7 +16,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import javax.swing.AbstractButton;
 import javax.swing.JTextArea;
@@ -114,6 +114,9 @@ class ConsoleJourneyIntegrationTest {
                     new Question("curl -i -XPUT http://localhost:8098/riak/diario/uno -d hola", "204"),
                     new Question("http://localhost:8098/riak/diario/uno", "hola"),
                     new Question("http://localhost:8098/riak/diario/no-existe", "404"));
+            // Filtered out before this is reached: Jupyter has no console to ask.
+            case JUPYTER -> throw new IllegalArgumentException(
+                    database.displayName() + " is not asked questions");
         };
     }
 
@@ -126,6 +129,9 @@ class ConsoleJourneyIntegrationTest {
             case NEO4J_TWITTER -> new Question("ESTO NO ES CYPHER", "Invalid input");
             case REDIS -> new Question("COMANDO-INVENTADO", "unknown command");
             case RIAK -> new Question("http://localhost:9/no-hay-nadie", "curl:");
+            // Filtered out before this is reached: Jupyter has no console to ask.
+            case JUPYTER -> throw new IllegalArgumentException(
+                    database.displayName() + " is not asked questions");
         };
     }
 
@@ -160,8 +166,16 @@ class ConsoleJourneyIntegrationTest {
         }
     }
 
+    /**
+     * The services a query can be typed at. Jupyter is driven from a browser, so there is
+     * no console for this journey to walk through.
+     */
+    static java.util.stream.Stream<Database> queryableDatabases() {
+        return java.util.Arrays.stream(Database.values()).filter(Database::hasQueryConsole);
+    }
+
     @ParameterizedTest(name = "{0}")
-    @EnumSource(Database.class)
+    @MethodSource("queryableDatabases")
     void aStudentStartsTheServiceThenAsksItSeveralThings(Database database) throws Exception {
         assumeTrue(DockerAvailability.isRunning(), "Docker is not running");
 
@@ -210,7 +224,7 @@ class ConsoleJourneyIntegrationTest {
     }
 
     @ParameterizedTest(name = "{0}")
-    @EnumSource(Database.class)
+    @MethodSource("queryableDatabases")
     void aQueryThatTheDatabaseRefusesIsReportedAndLeavesTheConsoleUsable(Database database)
             throws Exception {
         assumeTrue(DockerAvailability.isRunning(), "Docker is not running");

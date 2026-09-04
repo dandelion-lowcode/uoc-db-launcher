@@ -195,6 +195,13 @@ public class DockerManager {
         if (status == null) {
             return;
         }
+        // An event can only say a container came up, never that it passed a healthcheck
+        // it does not have. For a service that publishes none, coming up is the whole of
+        // being ready, and reporting it as still starting would be undone by the next
+        // poll a few seconds later, making the indicator flicker.
+        if (status == ServiceStatus.RUNNING && !Database.fromKey(key).reportsHealth()) {
+            status = ServiceStatus.HEALTHY;
+        }
         reporter.report(key, status);
     }
 
@@ -248,7 +255,8 @@ public class DockerManager {
                     : null;
 
             ServiceStatus status = ContainerStatus.fromState(
-                    Boolean.TRUE.equals(state.getRunning()), healthStatus);
+                    Boolean.TRUE.equals(state.getRunning()), healthStatus,
+                    Database.fromKey(key).reportsHealth());
             reporter.report(key, status);
         } catch (NotFoundException e) {
             reporter.report(key, ServiceStatus.STOPPED);

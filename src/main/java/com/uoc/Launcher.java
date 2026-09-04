@@ -90,9 +90,9 @@ public class Launcher {
 
         dockerManager.setListener((key, status) -> {
             servicesPanel.updateStatus(key, status);
-            tabs.tabFor(key).setSendEnabled(status == ServiceStatus.HEALTHY);
+            tabs.setSendEnabled(key, status == ServiceStatus.HEALTHY);
         });
-        dockerManager.setFailureListener((key, details) -> tabs.tabFor(key).showFailure(details));
+        dockerManager.setFailureListener(tabs::showFailure);
         databases.forEach(database -> dockerManager.refreshStatus(database.key()));
 
         // The console starts in whatever font was chosen last time, if this machine

@@ -21,15 +21,15 @@ public class DatabasesMenu {
         JMenu menu = new JMenu();
         Map<Database, JCheckBoxMenuItem> items = new EnumMap<>(Database.class);
 
-        Boolean previousWasShownByDefault = null;
+        Database previous = null;
         for (Database database : tabs.databases()) {
-            // The databases the course does not use are grouped apart from the ones it
-            // does.
-            if (previousWasShownByDefault != null
-                    && previousWasShownByDefault != database.isShownByDefault()) {
+            // Three groups, each divided from the last: the databases the course works
+            // through, the ones it only mentions, and Jupyter, which is not a database.
+            if (previous != null && (previous.kind() != database.kind()
+                    || previous.isShownByDefault() != database.isShownByDefault())) {
                 menu.addSeparator();
             }
-            previousWasShownByDefault = database.isShownByDefault();
+            previous = database;
 
             JCheckBoxMenuItem item = new JCheckBoxMenuItem(database.displayName());
             item.setName(database.key());

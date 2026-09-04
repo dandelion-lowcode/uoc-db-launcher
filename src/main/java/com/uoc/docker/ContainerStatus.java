@@ -37,11 +37,32 @@ public final class ContainerStatus {
      * @return never {@code null}
      */
     public static ServiceStatus fromState(boolean running, String health) {
+        return fromState(running, health, true);
+    }
+
+    /**
+     * The status of a container from its inspected state.
+     *
+     * @param running       whether Docker reports the container as running
+     * @param health        the healthcheck result, or {@code null} when the image defines
+     *                      none
+     * @param reportsHealth whether this service publishes a healthcheck at all. When it
+     *                      does not, being up is all readiness can mean, and waiting for
+     *                      a result that will never arrive would leave it shown as
+     *                      starting forever.
+     * @return never {@code null}
+     */
+    public static ServiceStatus fromState(boolean running, String health, boolean reportsHealth) {
         // Health is only meaningful while the container runs: Docker retains the last
         // result after it exits, which would otherwise show a stopped service as
         // failed.
         if (!running) {
             return ServiceStatus.STOPPED;
+        }
+        // A service that publishes no healthcheck is ready the moment it is up. Asking
+        // Docker about its health would answer nothing, for ever.
+        if (!reportsHealth) {
+            return ServiceStatus.HEALTHY;
         }
         if (isHealth(health, HEALTHY)) {
             return ServiceStatus.HEALTHY;
@@ -49,7 +70,7 @@ public final class ContainerStatus {
         if (isHealth(health, UNHEALTHY)) {
             return ServiceStatus.UNHEALTHY;
         }
-        // Up, but either still starting its healthcheck or without one at all.
+        // Up, but still starting its healthcheck.
         return ServiceStatus.RUNNING;
     }
 

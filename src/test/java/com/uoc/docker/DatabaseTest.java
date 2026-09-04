@@ -70,11 +70,34 @@ class DatabaseTest {
     }
 
     @Test
-    void theCourseShowsThreeDatabasesAndOffersThreeMoreOnRequest() {
+    void theCourseShowsThreeDatabasesAndOffersFourMoreServicesOnRequest() {
         assertThat(Database.values()).filteredOn(Database::isShownByDefault)
                 .containsExactly(Database.MONGO, Database.CASSANDRA, Database.NEO4J);
         assertThat(Database.values()).filteredOn(d -> !d.isShownByDefault())
-                .containsExactly(Database.NEO4J_TWITTER, Database.REDIS, Database.RIAK);
+                .containsExactly(Database.NEO4J_TWITTER, Database.REDIS, Database.RIAK,
+                        Database.JUPYTER);
+    }
+
+    @Test
+    void jupyterIsTheOnlyServiceThatIsNotADatabase() {
+        // Everything that sets it apart follows from this: no console to type at, and no
+        // healthcheck to wait for.
+        assertThat(Database.values()).filteredOn(d -> d.kind() == Database.Kind.NOTEBOOK)
+                .containsExactly(Database.JUPYTER);
+        assertThat(Database.JUPYTER.hasQueryConsole()).isFalse();
+        assertThat(Database.JUPYTER.reportsHealth()).isFalse();
+    }
+
+    @Test
+    void everyDatabaseIsQueriedAndJudgedByItsHealthcheck() {
+        assertThat(Database.values()).filteredOn(d -> d.kind() == Database.Kind.DATABASE)
+                .allMatch(Database::hasQueryConsole)
+                .allMatch(Database::reportsHealth);
+    }
+
+    @Test
+    void jupyterComesLastSoTheMenuCanGroupItApart() {
+        assertThat(Database.values()[Database.values().length - 1]).isEqualTo(Database.JUPYTER);
     }
 
     @Test
