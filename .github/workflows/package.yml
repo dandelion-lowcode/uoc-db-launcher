@@ -76,11 +76,17 @@ jobs:
           MODULES=$(jdeps --print-module-deps --ignore-missing-deps \
             --multi-release "$JAVA_VERSION" \
             --class-path "target/dist/input/*" target/classes)
-          # jdeps reports what the bytecode references, and locale data is not referenced
-          # by anything: it is looked up by name at run time. Without it the interface
-          # still translates, because those texts are the application's own, but anything
-          # MessageFormat renders falls back to English conventions. It costs 0.4 MB.
-          echo "JLINK_MODULES=$MODULES,jdk.localedata" >> "$GITHUB_ENV"
+          # jdeps reports what the bytecode references, so anything found by name at run
+          # time has to be named here instead. Both of these are invisible to it:
+          #
+          #   jdk.localedata  without it the interface still translates, because those
+          #                   texts are the application's own, but anything MessageFormat
+          #                   renders falls back to English conventions. Costs 0.4 MB.
+          #   jdk.zipfs       reading the bundled Docker files out of the application's
+          #                   own jar needs it. Leaving it out builds and starts perfectly
+          #                   well, then fails with "Provider jar not found" the moment a
+          #                   student presses a play button.
+          echo "JLINK_MODULES=$MODULES,jdk.localedata,jdk.zipfs" >> "$GITHUB_ENV"
 
       - name: Build a runtime holding only those parts
         shell: bash
