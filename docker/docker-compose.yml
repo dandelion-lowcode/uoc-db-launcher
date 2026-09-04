@@ -52,7 +52,12 @@ services:
   neo4j-twitter:
     # The dataset travels inside the image, so a student who deletes half the graph gets
     # it back by restarting the service, as with every other database here.
-    build: ./neo4j-twitter
+    #
+    # Pulled rather than built. The graph is four million nodes, and expanding it takes
+    # minutes on a laptop and a 336 MB file that cannot live in this repository; building
+    # it once and publishing it costs a student a 0.54 GB download instead. The build
+    # context lives outside this repository, and its README explains how to republish.
+    image: ghcr.io/dandelion-lowcode/uocdb-neo4j-twitter:1.0
     container_name: uocdb-neo4j-twitter
     environment:
       - NEO4J_AUTH=none

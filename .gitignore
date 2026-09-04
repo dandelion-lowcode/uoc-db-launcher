@@ -94,7 +94,3 @@ nb-configuration.xml
 
 # Local Python environment, not part of the build
 .venv/
-# The Twitter graph, 336 MB, over GitHub's 100 MB limit for a single file. It is not
-# kept here at all: the image built from it is published to a registry, and the compose
-# file pulls it like any other. See docker/neo4j-twitter/README.md.
-docker/neo4j-twitter/twitter.dump

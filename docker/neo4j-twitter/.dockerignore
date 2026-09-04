@@ -1,5 +1,0 @@
-# Kept as a rule rather than a note: if an expanded database is ever dropped back into
-# this directory it must not reach the image, which is built from the dump instead. The
-# dump holds the same graph in a fifth of the space.
-import/
-data/
