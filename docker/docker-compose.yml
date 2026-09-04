@@ -1,0 +1,134 @@
+# Versions are pinned rather than left at "latest" so the course keeps working. A student
+# who starts these six months from now gets the same databases the exercises were written
+# against, instead of a MongoDB or a Cassandra that has moved on and answers differently.
+# Every version here is one the launcher has been run against.
+
+# Without this, Compose names the project after the directory holding this file, and the
+# network and any volume are named after the project. Moving this file, or renaming the
+# folder a student unzipped, would silently leave their containers behind under the old
+# name. The name is fixed here so it never depends on where the file sits.
+name: uocdb
+
+services:
+  mongo:
+    image: mongo:8.3.8
+    container_name: uocdb-mongo
+    ports:
+      - "27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  cassandra:
+    image: cassandra:5.0.9
+    container_name: uocdb-cassandra
+    ports:
+      - "9042:9042"
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'describe keyspaces' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  neo4j:
+    image: neo4j:2026.07.1
+    container_name: uocdb-neo4j
+    environment:
+      - NEO4J_AUTH=none
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -O /dev/null -q http://localhost:7474 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  neo4j-twitter:
+    # The dataset travels inside the image, so a student who deletes half the graph gets
+    # it back by restarting the service, as with every other database here.
+    build: ./neo4j-twitter
+    container_name: uocdb-neo4j-twitter
+    environment:
+      - NEO4J_AUTH=none
+    ports:
+      - "17474:7474"
+      - "17687:7687"
+    healthcheck:
+      # The web interface answers well before the graph can be queried, and the console
+      # talks over Bolt, not HTTP. Asking the query engine itself is the only check that
+      # means the console is usable.
+      test: ["CMD-SHELL", "cypher-shell 'RETURN 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  redis:
+    image: redis:8.10.1
+    container_name: uocdb-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Riak derives its Erlang node name from the container IP (riak@<ip>), and its
+  # stored ring state is tied to that name. A new IP after a restart therefore makes
+  # the node refuse to start. Pinning the address keeps the node name stable.
+  riak:
+    # Riak is covered in theory only, so what matters here is that a student can try the
+    # requests from the notes without downloading a gigabyte for it. See the Dockerfile
+    # for why the image Basho left behind is not used.
+    build: ./riak
+    container_name: uocdb-riak
+    hostname: uocdb-riak
+    networks:
+      uocdb:
+        # A fixed address keeps the node name stable across restarts, which is what Riak
+        # names its ring after.
+        ipv4_address: 172.28.0.10
+    ports:
+      - "8087:8087"
+      - "8098:8098"
+    healthcheck:
+      # Asks for a key over HTTP, which is the path the console uses. A "not found" is a
+      # healthy answer and proves the key-value layer replied; a degraded node answers
+      # 500 instead, which "riak ping" never notices because the Erlang node is still up.
+      # A read is used rather than "riak-admin test", which writes to one fixed key and
+      # reports {error,locked} against its own previous run every few seconds.
+      test: ["CMD-SHELL", "code=$$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8098/riak/healthcheck/probe); case \"$$code\" in 2*|4*) exit 0;; *) exit 1;; esac"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  jupyter:
+    build:
+      context: ./jupyter
+    image: uocdb-jupyter:latest
+    container_name: uocdb-jupyter
+    ports:
+      - "8888:8888"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # Which notebooks the student works on. The default is the copy in the source
+      # tree, which is what running from the project does. A packaged application has
+      # them inside its jar, where nothing can be mounted or saved, so it unpacks them
+      # into a per-user directory on first run and names that directory here instead.
+      - ${UOCDB_NOTEBOOKS:-../src/main/resources/notebooks}:/home/jovyan/work/notebooks
+
+networks:
+  uocdb:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16

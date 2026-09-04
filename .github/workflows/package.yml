@@ -1,0 +1,161 @@
+# Builds the application into a self-contained directory for each system a student may
+# have, and attaches the four archives to a GitHub release.
+#
+# There is one job per system on purpose: jpackage cannot cross-build, so a Windows
+# executable has to be produced on Windows and a macOS bundle on macOS. That is the one
+# real constraint the tool imposes, and a build matrix is the answer to it.
+#
+# Nothing here is signed, because the course has no certificate. The archives are
+# therefore plain directories rather than installers: an unsigned installer triggers the
+# loudest warnings the system has and asks for administrator rights, and gives nothing
+# back for either.
+
+name: Package
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+env:
+  APP_NAME: UOC DB Launcher
+  MAIN_CLASS: com.uoc.Launcher
+  JAVA_VERSION: "25"
+
+jobs:
+  build:
+    name: ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # One system failing should not hide whether the others work.
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux-x64
+          - os: windows-latest
+            platform: windows-x64
+          # Intel Macs and Apple Silicon need separate builds; a runtime is native code.
+          - os: macos-13
+            platform: macos-x64
+          - os: macos-14
+            platform: macos-arm64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      # The tests need a Docker daemon with seven databases on it, which only the Linux
+      # runner has. They run in their own workflow; this one only packages.
+      - name: Build the jar and gather its dependencies
+        shell: bash
+        run: |
+          mvn -B package -DskipTests
+          mvn -B dependency:copy-dependencies \
+            -DoutputDirectory=target/dist/libs -DincludeScope=runtime
+          mkdir -p target/dist/input
+          mv target/dist/libs/*.jar target/dist/input/
+          cp target/uoc-db-launcher-*.jar target/dist/input/app.jar
+
+      - name: Work out which parts of Java are actually used
+        shell: bash
+        run: |
+          # Asking jdeps keeps the runtime correct as dependencies come and go, instead
+          # of a hand-written list that silently rots into a crash on a student's machine.
+          MODULES=$(jdeps --print-module-deps --ignore-missing-deps \
+            --multi-release "$JAVA_VERSION" \
+            --class-path "target/dist/input/*" target/classes)
+          # jdeps reports what the bytecode references, and locale data is not referenced
+          # by anything: it is looked up by name at run time. Without it the interface
+          # still translates, because those texts are the application's own, but anything
+          # MessageFormat renders falls back to English conventions. It costs 0.4 MB.
+          echo "JLINK_MODULES=$MODULES,jdk.localedata" >> "$GITHUB_ENV"
+
+      - name: Build a runtime holding only those parts
+        shell: bash
+        run: |
+          jlink \
+            --add-modules "$JLINK_MODULES" \
+            --include-locales=en,es,ca \
+            --strip-debug --no-header-files --no-man-pages --compress=zip-6 \
+            --output target/dist/runtime
+
+      - name: Assemble the application
+        shell: bash
+        run: |
+          # jpackage refuses a Maven version: it wants digits and dots, so "1.0-SNAPSHOT"
+          # is rejected outright.
+          RAW=$(mvn -B -q help:evaluate -Dexpression=project.version -DforceStdout)
+          VERSION=$(echo "$RAW" | sed 's/-SNAPSHOT//')
+          case "$VERSION" in
+            *.*.*) ;;
+            *.*) VERSION="$VERSION.0" ;;
+            *) VERSION="$VERSION.0.0" ;;
+          esac
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+          jpackage \
+            --type app-image \
+            --name "$APP_NAME" \
+            --app-version "$VERSION" \
+            --input target/dist/input \
+            --main-jar app.jar \
+            --main-class "$MAIN_CLASS" \
+            --runtime-image target/dist/runtime \
+            --dest target/dist/image \
+            --java-options "--enable-native-access=ALL-UNNAMED"
+
+      # Without the flag above, FlatLaf loading its native library prints four lines of
+      # warnings before the window appears, and a future release of Java turns that from
+      # a warning into a refusal to run.
+
+      - name: Archive it
+        shell: bash
+        run: |
+          NAME="uoc-db-launcher-$VERSION-${{ matrix.platform }}"
+          mkdir -p target/release
+          cd target/dist/image
+          case "${{ runner.os }}" in
+            macOS)
+              # ditto, not zip: a .app is full of symlinks and permission bits that zip
+              # flattens, and a flattened bundle will not launch.
+              ditto -c -k --keepParent "$APP_NAME.app" "../../release/$NAME.zip"
+              ;;
+            Windows)
+              powershell -NoProfile -Command \
+                "Compress-Archive -Path '$APP_NAME' -DestinationPath '../../release/$NAME.zip' -Force"
+              ;;
+            *)
+              tar czf "../../release/$NAME.tar.gz" "$APP_NAME"
+              ;;
+          esac
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform }}
+          path: target/release/*
+
+  release:
+    name: Publish the release
+    needs: build
+    runs-on: ubuntu-latest
+    # Only a tag becomes a release; a manual run is for checking that the build still works.
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Attach every system's archive to the tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ github.ref_name }}" artifacts/* \
+          --repo "${{ github.repository }}" --generate-notes

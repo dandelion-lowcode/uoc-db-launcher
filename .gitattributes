@@ -1,0 +1,14 @@
+# Normalise line endings in the repository, and decide them per file on checkout.
+* text=auto
+
+# These are read by Linux inside a container. Checked out with Windows line endings they
+# fail with "bad interpreter", which says nothing about the real cause, so they are
+# pinned regardless of the system doing the checkout.
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.yml text eol=lf
+
+*.jar binary
+*.dump binary
+*.png binary
+*.ico binary

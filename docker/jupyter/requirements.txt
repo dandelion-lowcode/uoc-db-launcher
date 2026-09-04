@@ -1,0 +1,21 @@
+# Pinned so the notebooks keep working. Without versions here, a student building this
+# image months from now would get whatever those packages have become, and a driver that
+# changed its API breaks the exercises with no clue as to why.
+#
+# These are the versions the notebooks were run against. To move them on, change a
+# version, rebuild, and run the notebooks before keeping the change.
+
+# The notebook interface itself
+notebook==7.6.2
+ipykernel==7.3.0
+
+# One driver per database the course uses. py2neo is no longer maintained, so Neo4j is
+# reached through the driver Neo4j itself publishes.
+cassandra-driver==3.30.1
+pymongo==4.18.0
+neo4j==6.3.0
+redis==8.1.0
+
+# The interface in the languages of the course
+jupyterlab-language-pack-es-ES==4.5.post3
+jupyterlab-language-pack-ca-ES==4.5.post3
