@@ -100,9 +100,17 @@ jobs:
       - name: Assemble the application
         shell: bash
         run: |
+          # A tag is what a release is named after, so it decides the version and the
+          # file names. Without this the archives were named after the POM, and v1.0.1
+          # shipped four files all called 1.0.0.
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            RAW="${{ github.ref_name }}"
+            RAW="${RAW#v}"
+          else
+            RAW=$(mvn -B -q help:evaluate -Dexpression=project.version -DforceStdout)
+          fi
           # jpackage refuses a Maven version: it wants digits and dots, so "1.0-SNAPSHOT"
           # is rejected outright.
-          RAW=$(mvn -B -q help:evaluate -Dexpression=project.version -DforceStdout)
           VERSION=$(echo "$RAW" | sed 's/-SNAPSHOT//')
           case "$VERSION" in
             *.*.*) ;;
