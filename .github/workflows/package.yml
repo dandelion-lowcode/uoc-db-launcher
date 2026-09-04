@@ -163,5 +163,9 @@ jobs:
       - name: Attach every system's archive to the tag
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ github.ref_name }}" artifacts/* \
-          --repo "${{ github.repository }}" --generate-notes
+        # A block scalar, not the default folded one. Without the pipe, YAML joins these
+        # lines into a single string and the backslash survives as a literal argument,
+        # which the shell then tries to expand as a filename and fails on.
+        run: |
+          gh release create "${{ github.ref_name }}" artifacts/* \
+            --repo "${{ github.repository }}" --generate-notes
