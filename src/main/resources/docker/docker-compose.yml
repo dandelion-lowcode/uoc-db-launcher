@@ -10,6 +10,15 @@
 # invitation to run code on their laptop. Nothing is lost by binding to localhost, since
 # the launcher and the browser it opens are both on it.
 
+# A healthcheck that has to start a client of its own -- mongosh, cqlsh, cypher-shell --
+# is given fifteen seconds to answer, not five. With all ten services running on this
+# machine, MongoDB was reported unhealthy while its check was replying { ok: 1 } a little
+# past the five-second mark: the database was answering correctly and the host was busy.
+# Several databases at once is precisely the machine a student runs, and the launcher
+# telling them a working database is unavailable is a worse fault than a tick appearing a
+# few seconds late. The checks that are a bare HTTP request keep the shorter limit, since
+# nothing about those takes seconds unless the service really is down.
+
 # Without this, Compose names the project after the directory holding this file, and the
 # network and any volume are named after the project. Moving this file, or renaming the
 # folder a student unzipped, would silently leave their containers behind under the old
@@ -23,9 +32,11 @@ services:
     ports:
       - "127.0.0.1:27017:27017"
     healthcheck:
+      # The check the fifteen seconds above were measured on: mongosh is a whole
+      # JavaScript runtime, started afresh for every ping.
       test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
       interval: 10s
-      timeout: 5s
+      timeout: 15s
       retries: 5
       start_period: 20s
 
@@ -35,9 +46,10 @@ services:
     ports:
       - "127.0.0.1:9042:9042"
     healthcheck:
+      # A Python client, started and connected to the cluster on every check.
       test: ["CMD-SHELL", "cqlsh -e 'describe keyspaces' || exit 1"]
       interval: 10s
-      timeout: 5s
+      timeout: 15s
       retries: 10
       start_period: 60s
 
@@ -75,9 +87,12 @@ services:
       # The web interface answers well before the graph can be queried, and the console
       # talks over Bolt, not HTTP. Asking the query engine itself is the only check that
       # means the console is usable.
+      #
+      # It is also the most expensive check here: a second JVM starts for every one of
+      # them, on top of the one holding four million nodes.
       test: ["CMD-SHELL", "cypher-shell 'RETURN 1' || exit 1"]
       interval: 10s
-      timeout: 5s
+      timeout: 15s
       retries: 5
       start_period: 30s
 
@@ -127,9 +142,12 @@ services:
       # -f is what makes a 4xx or a 5xx a failure. "riak-admin test" is not used: it
       # writes to one fixed key and reports {error,locked} against its own previous run
       # every few seconds.
+      #
+      # Ten seconds rather than five: curl itself is cheap, but what it asks for is a
+      # write, and a write here is answered by the ring rather than by a status page.
       test: ["CMD-SHELL", "curl -sf -o /dev/null -XPUT -H 'Content-Type: text/plain' -d ok http://localhost:8098/riak/healthcheck/probe"]
       interval: 10s
-      timeout: 5s
+      timeout: 10s
       retries: 5
       start_period: 30s
 
@@ -207,7 +225,10 @@ services:
       # the data a student has come here for answered "0 rows".
       test: ["CMD-SHELL", "/opt/vertica/bin/vsql -X -h localhost -U dbadmin -d VMart -tAc \"SELECT count(*) FROM tables WHERE table_schema='public'\" | grep -qv '^0$'"]
       interval: 15s
-      timeout: 10s
+      # Ten seconds here were already an admission of the problem the note at the top of
+      # this file describes. It is the same client, the same query and the hungriest
+      # service of the eleven, so it gets the same fifteen as the others.
+      timeout: 15s
       retries: 10
       start_period: 60s
 
@@ -248,9 +269,12 @@ services:
       # from source and when it runs from an installed copy.
       - ${UOCDB_NOTEBOOKS:-../notebooks}:/home/jovyan/work/notebooks
     healthcheck:
+      # The request carries its own three-second limit, so the one below is really about
+      # starting a Python interpreter, which is the part that runs long when the machine
+      # is busy rather than idle.
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8888/tree', timeout=3)"]
       interval: 10s
-      timeout: 5s
+      timeout: 10s
       retries: 5
       start_period: 15s
 
