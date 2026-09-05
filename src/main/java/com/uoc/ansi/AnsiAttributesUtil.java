@@ -9,18 +9,41 @@ import javax.swing.text.StyleConstants;
  */
 public final class AnsiAttributesUtil {
 
+    private AnsiAttributesUtil() {
+    }
+
     /**
      * Updates the styling on a {@link MutableAttributeSet} based on an ANSI Escape Code.
      *
-     * @param escCode    is the {@link AnsiEscCode} defining the style to set, e.g. {@link AnsiEscCode#BOLD}.
-     * @param ansiColors is the {@link IAnsiColors} that defines the foreground and background colors to use for the styling.
+     * <p>
+     * The thirty-two colour codes are handled together rather than one case each: every
+     * one of them says which colour to paint and whether to paint it behind the text or
+     * in it, and the code itself now answers both. What is left is the handful of styles
+     * that are not colours at all.
+     *
+     * @param escCode    the {@link AnsiEscCode} defining the style to set, e.g.
+     *                   {@link AnsiEscCode#BOLD}
+     * @param ansiColors the palette the colour codes are painted from
      */
-    public static MutableAttributeSet updateAnsi(MutableAttributeSet attributes, AnsiEscCode escCode, IAnsiColors ansiColors) {
+    public static MutableAttributeSet updateAnsi(MutableAttributeSet attributes,
+            AnsiEscCode escCode, IAnsiColors ansiColors) {
 
         var modifiedAttributes = new SimpleAttributeSet(attributes);
 
+        AnsiColor colour = escCode.colour();
+        if (colour != null) {
+            if (escCode.isBackground()) {
+                StyleConstants.setBackground(modifiedAttributes, ansiColors.of(colour));
+            } else {
+                StyleConstants.setForeground(modifiedAttributes, ansiColors.of(colour));
+            }
+            return modifiedAttributes;
+        }
+
         switch (escCode) {
             case RESET:
+                // Everything goes, except how the console is drawn: the font and its size
+                // belong to the console rather than to anything the text asked for.
                 modifiedAttributes = new SimpleAttributeSet();
                 StyleConstants.setFontFamily(modifiedAttributes, StyleConstants.getFontFamily(attributes));
                 StyleConstants.setFontSize(modifiedAttributes, StyleConstants.getFontSize(attributes));
@@ -54,140 +77,17 @@ public final class AnsiAttributesUtil {
                 StyleConstants.setUnderline(modifiedAttributes, false);
                 break;
 
-            case BLACK:
-                StyleConstants.setForeground(modifiedAttributes, ansiColors.black());
-                break;
-
-            case RED:
-                StyleConstants.setForeground(modifiedAttributes, ansiColors.red());
-                break;
-
-            case GREEN:
-                StyleConstants.setForeground(modifiedAttributes, ansiColors.green());
-                break;
-
-            case YELLOW:
-                StyleConstants.setForeground(modifiedAttributes, ansiColors.yellow());
-                break;
-
-            case BLUE:
-                StyleConstants.setForeground(modifiedAttributes, ansiColors.blue());
-                break;
-
-            case MAGENTA:
-                StyleConstants.setForeground(modifiedAttributes, ansiColors.magenta());
-                break;
-
-            case CYAN:
-                StyleConstants.setForeground(modifiedAttributes, ansiColors.cyan());
-                break;
-
-            case WHITE:
-                StyleConstants.setForeground(modifiedAttributes, ansiColors.white());
-                break;
-
-            case BRIGHT_BLACK:
-                StyleConstants.setForeground(modifiedAttributes, ansiColors.brightBlack());
-                break;
-
-            case BRIGHT_RED:
-                StyleConstants.setForeground(modifiedAttributes, ansiColors.brightRed());
-                break;
-
-            case BRIGHT_GREEN:
-                StyleConstants.setForeground(modifiedAttributes, ansiColors.brightGreen());
-                break;
-
-            case BRIGHT_YELLOW:
-                StyleConstants.setForeground(modifiedAttributes, ansiColors.brightYellow());
-                break;
-
-            case BRIGHT_BLUE:
-                StyleConstants.setForeground(modifiedAttributes, ansiColors.brightBlue());
-                break;
-
-            case BRIGHT_MAGENTA:
-                StyleConstants.setForeground(modifiedAttributes, ansiColors.brightMagenta());
-                break;
-
-            case BRIGHT_CYAN:
-                StyleConstants.setForeground(modifiedAttributes, ansiColors.brightCyan());
-                break;
-
-            case BRIGHT_WHITE:
-                StyleConstants.setForeground(modifiedAttributes, ansiColors.brightWhite());
-                break;
-
+            // These two take a colour away rather than setting one, which is why they are
+            // not among the codes that name a palette colour.
             case DEFAULT:
                 modifiedAttributes.removeAttribute(StyleConstants.Foreground);
                 break;
 
-            case BLACK_BACKGROUND:
-                StyleConstants.setBackground(modifiedAttributes, ansiColors.black());
-                break;
-
-            case RED_BACKGROUND:
-                StyleConstants.setBackground(modifiedAttributes, ansiColors.red());
-                break;
-
-            case GREEN_BACKGROUND:
-                StyleConstants.setBackground(modifiedAttributes, ansiColors.green());
-                break;
-
-            case YELLOW_BACKGROUND:
-                StyleConstants.setBackground(modifiedAttributes, ansiColors.yellow());
-                break;
-
-            case BLUE_BACKGROUND:
-                StyleConstants.setBackground(modifiedAttributes, ansiColors.blue());
-                break;
-
-            case MAGENTA_BACKGROUND:
-                StyleConstants.setBackground(modifiedAttributes, ansiColors.magenta());
-                break;
-
-            case CYAN_BACKGROUND:
-                StyleConstants.setBackground(modifiedAttributes, ansiColors.cyan());
-                break;
-
-            case WHITE_BACKGROUND:
-                StyleConstants.setBackground(modifiedAttributes, ansiColors.white());
-                break;
-
-            case BRIGHT_BLACK_BACKGROUND:
-                StyleConstants.setBackground(modifiedAttributes, ansiColors.brightBlack());
-                break;
-
-            case BRIGHT_RED_BACKGROUND:
-                StyleConstants.setBackground(modifiedAttributes, ansiColors.brightRed());
-                break;
-
-            case BRIGHT_GREEN_BACKGROUND:
-                StyleConstants.setBackground(modifiedAttributes, ansiColors.brightGreen());
-                break;
-
-            case BRIGHT_YELLOW_BACKGROUND:
-                StyleConstants.setBackground(modifiedAttributes, ansiColors.brightYellow());
-                break;
-
-            case BRIGHT_BLUE_BACKGROUND:
-                StyleConstants.setBackground(modifiedAttributes, ansiColors.brightBlue());
-                break;
-
-            case BRIGHT_MAGENTA_BACKGROUND:
-                StyleConstants.setBackground(modifiedAttributes, ansiColors.brightMagenta());
-                break;
-
-            case BRIGHT_CYAN_BACKGROUND:
-                StyleConstants.setBackground(modifiedAttributes, ansiColors.brightCyan());
-                break;
-
-            case BRIGHT_WHITE_BACKGROUND:
-                StyleConstants.setBackground(modifiedAttributes, ansiColors.brightWhite());
-                break;
-
             case DEFAULT_BACKGROUND:
                 modifiedAttributes.removeAttribute(StyleConstants.Background);
+                break;
+
+            default:
                 break;
         }
         return modifiedAttributes;

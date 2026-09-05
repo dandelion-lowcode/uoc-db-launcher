@@ -192,8 +192,54 @@ public enum AnsiEscCode {
      */
     public final String escCode;
 
+    /**
+     * The palette colour this code names, or {@code null} when it names none.
+     *
+     * <p>
+     * Worked out from the constant's own name rather than written out again: {@code
+     * BRIGHT_CYAN_BACKGROUND} paints {@code BRIGHT_CYAN} on the background, and {@code
+     * BOLD} paints no colour at all. There used to be a switch of thirty-two cases doing
+     * this by hand, one per colour and side, and every colour added meant two more.
+     *
+     * <p>
+     * The two {@code DEFAULT} codes are deliberately left out: they take the colour away
+     * rather than setting one, which is not something a palette can express.
+     */
+    private final AnsiColor colour;
+
+    /** Whether this code paints the background rather than the text. */
+    private final boolean background;
+
     AnsiEscCode(String escCode) {
         this.escCode = escCode;
+        this.background = name().endsWith(BACKGROUND_SUFFIX);
+        this.colour = colourNamedBy(background
+                ? name().substring(0, name().length() - BACKGROUND_SUFFIX.length())
+                : name());
+    }
+
+    private static final String BACKGROUND_SUFFIX = "_BACKGROUND";
+
+    private static AnsiColor colourNamedBy(String name) {
+        if (name.equals(AnsiColor.DEFAULT.name())) {
+            return null;
+        }
+        for (AnsiColor candidate : AnsiColor.values()) {
+            if (candidate.name().equals(name)) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    /** The palette colour this code paints, or {@code null} when it paints none. */
+    public AnsiColor colour() {
+        return colour;
+    }
+
+    /** Whether this code paints the background rather than the text. */
+    public boolean isBackground() {
+        return background;
     }
 
     /**

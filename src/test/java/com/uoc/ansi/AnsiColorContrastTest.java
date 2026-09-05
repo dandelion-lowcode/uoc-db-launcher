@@ -1,21 +1,21 @@
 package com.uoc.ansi;
 
-import com.formdev.flatlaf.FlatDarkLaf;
-import com.formdev.flatlaf.FlatLightLaf;
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.awt.Color;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Stream;
+
+import javax.swing.UIManager;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
-import javax.swing.UIManager;
-import java.awt.Color;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.function.Function;
-import java.util.stream.Stream;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import com.formdev.flatlaf.FlatDarkLaf;
+import com.formdev.flatlaf.FlatLightLaf;
 
 /**
  * Checks the console palettes against the console backgrounds they are painted
@@ -81,53 +81,48 @@ class AnsiColorContrastTest {
      * outside every test, where a mutation testing tool cannot tell which test
      * covers it.
      */
-    private record PaletteColour(String theme, String name,
-            IAnsiColors palette, Function<IAnsiColors, Color> accessor,
+    private record PaletteColour(String theme, boolean dark, AnsiColor colour,
             Color background) {
 
-        Color colour() {
-            return accessor.apply(palette);
+        /**
+         * The palette now lives in the look and feel, so the theme has to be the one
+         * installed at the moment the colour is read. Installing it here rather than
+         * while the arguments are built is what keeps the reading inside the test.
+         */
+        Color value() {
+            if (dark) {
+                FlatDarkLaf.setup();
+            } else {
+                FlatLightLaf.setup();
+            }
+            return new ThemeAnsiColors().of(colour);
         }
 
         @Override
         public String toString() {
-            return theme + " theme, " + name;
+            return theme + " theme, " + colour.themeKey();
         }
     }
 
     private static Stream<Arguments> everyColourOfEveryTheme() {
+        // Registered before any theme is built, or the theme is built without our
+        // colours in it and every one of them comes back missing.
+        com.formdev.flatlaf.FlatLaf.registerCustomDefaultsSource("themes");
+
         List<Arguments> all = new ArrayList<>();
-        all.addAll(coloursOf("light", new LightThemeAnsiColors(), backgroundOf(false)));
-        all.addAll(coloursOf("dark", new DarkThemeAnsiColors(), backgroundOf(true)));
+        all.addAll(coloursOf("light", false, backgroundOf(false)));
+        all.addAll(coloursOf("dark", true, backgroundOf(true)));
         return all.stream();
     }
 
-    private static List<Arguments> coloursOf(String theme, IAnsiColors palette, Color background) {
-        record Entry(String name, Function<IAnsiColors, Color> get) {
-        }
-        List<Entry> entries = List.of(
-                new Entry("black", IAnsiColors::black),
-                new Entry("red", IAnsiColors::red),
-                new Entry("green", IAnsiColors::green),
-                new Entry("yellow", IAnsiColors::yellow),
-                new Entry("blue", IAnsiColors::blue),
-                new Entry("magenta", IAnsiColors::magenta),
-                new Entry("cyan", IAnsiColors::cyan),
-                new Entry("white", IAnsiColors::white),
-                new Entry("brightBlack", IAnsiColors::brightBlack),
-                new Entry("brightRed", IAnsiColors::brightRed),
-                new Entry("brightGreen", IAnsiColors::brightGreen),
-                new Entry("brightYellow", IAnsiColors::brightYellow),
-                new Entry("brightBlue", IAnsiColors::brightBlue),
-                new Entry("brightMagenta", IAnsiColors::brightMagenta),
-                new Entry("brightCyan", IAnsiColors::brightCyan),
-                new Entry("brightWhite", IAnsiColors::brightWhite),
-                new Entry("default", IAnsiColors::defaultColor));
-
+    /**
+     * Every colour the palette holds, without listing them: they are named once, in
+     * {@link AnsiColor}, and everything that walks them loops over that.
+     */
+    private static List<Arguments> coloursOf(String theme, boolean dark, Color background) {
         List<Arguments> arguments = new ArrayList<>();
-        for (Entry entry : entries) {
-            arguments.add(Arguments.of(
-                    new PaletteColour(theme, entry.name(), palette, entry.get(), background)));
+        for (AnsiColor colour : AnsiColor.values()) {
+            arguments.add(Arguments.of(new PaletteColour(theme, dark, colour, background)));
         }
         return arguments;
     }
@@ -136,7 +131,7 @@ class AnsiColorContrastTest {
     @MethodSource("everyColourOfEveryTheme")
     @DisplayName("every console colour is readable on its own background")
     void everyColourClearsTheAccessibilityThreshold(PaletteColour entry) {
-        Color colour = entry.colour();
+        Color colour = entry.value();
 
         assertThat(colour).as("%s must define a colour", entry).isNotNull();
         assertThat(contrastRatio(colour, entry.background()))
@@ -148,7 +143,7 @@ class AnsiColorContrastTest {
     @MethodSource("everyColourOfEveryTheme")
     @DisplayName("no console colour disappears into its background")
     void everyColourIsDistinctFromTheBackgroundItSitsOn(PaletteColour entry) {
-        assertThat(entry.colour()).as("%s", entry).isNotEqualTo(entry.background());
+        assertThat(entry.value()).as("%s", entry).isNotEqualTo(entry.background());
     }
 
     private static String hex(Color color) {

@@ -7,6 +7,7 @@ import com.uoc.platform.SystemDarkMode;
 import com.formdev.flatlaf.FlatDarkLaf;
 import com.formdev.flatlaf.FlatLaf;
 import com.formdev.flatlaf.FlatLightLaf;
+import com.formdev.flatlaf.extras.FlatAnimatedLafChange;
 
 import javax.swing.ButtonGroup;
 import javax.swing.JMenu;
@@ -43,6 +44,9 @@ public class ThemeManager {
 
     private static final String THEME_PREF_KEY = "theme";
 
+    /** Where our own colour definitions live, one properties file per theme. */
+    private static final String THEME_PACKAGE = "themes";
+
     private final Preferences prefs;
 
     public ThemeManager(Preferences prefs) {
@@ -50,7 +54,26 @@ public class ThemeManager {
     }
 
     public void applySavedTheme() {
+        registerOurColours();
         apply(savedTheme());
+    }
+
+    /**
+     * Adds the application's own colours to the look and feel.
+     *
+     * <p>
+     * FlatLaf reads {@code themes/FlatLightLaf.properties} and its dark twin the same way
+     * it reads its own, so the console palette and the service indicators end up in
+     * {@link javax.swing.UIManager} beside every other colour in the interface. Switching
+     * theme reloads them along with everything else, and there is no second system to
+     * tell about the change.
+     *
+     * <p>
+     * Registered before any theme is installed, or the first one would be built without
+     * them and every colour of ours would come back null.
+     */
+    private static void registerOurColours() {
+        FlatLaf.registerCustomDefaultsSource(THEME_PACKAGE);
     }
 
     private Theme savedTheme() {
@@ -81,10 +104,21 @@ public class ThemeManager {
         ActionListener onChange = e -> {
             Theme selected = lightItem.isSelected() ? Theme.LIGHT
                     : darkItem.isSelected() ? Theme.DARK : Theme.SYSTEM;
+
+            // The window as it looks now is photographed and left on top, so the change
+            // happens behind a still image and is then faded out. Without it the window
+            // is repainted piece by piece and the switch arrives as a flicker.
+            FlatAnimatedLafChange.showSnapshot();
+
             apply(selected);
             prefs.put(THEME_PREF_KEY, selected.name());
-            FlatLaf.updateUILater();
+
+            // Now rather than later: the snapshot is hidden on the line after this one,
+            // and deferring the repaint would uncover a window not yet redrawn.
+            FlatLaf.updateUI();
             onThemeChanged.run();
+
+            FlatAnimatedLafChange.hideSnapshotWithAnimation();
         };
         lightItem.addActionListener(onChange);
         darkItem.addActionListener(onChange);
