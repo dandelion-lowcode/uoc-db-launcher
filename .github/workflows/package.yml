@@ -97,6 +97,23 @@ jobs:
             --strip-debug --no-header-files --no-man-pages --compress=zip-6 \
             --output target/dist/runtime
 
+      # Every system wants the application's icon in its own format and jpackage rejects
+      # anything else, so all three are kept in the repository ready to use. Nothing is
+      # generated here: an icon changes about once in the life of a project, and building
+      # it on every run would be a step that can fail for three artefacts that never move.
+      #
+      # A macOS build used to have none of this. The icon the application sets on its own
+      # window is enough on Windows, but the Dock reads the bundle's icns and nothing
+      # else, so the application arrived wearing the generic Java icon.
+      - name: Choose the icon this system understands
+        shell: bash
+        run: |
+          case "${{ runner.os }}" in
+            macOS)   echo "ICON=src/main/packaging/icon.icns" >> "$GITHUB_ENV" ;;
+            Windows) echo "ICON=src/main/packaging/icon.ico" >> "$GITHUB_ENV" ;;
+            *)       echo "ICON=src/main/packaging/icon.png" >> "$GITHUB_ENV" ;;
+          esac
+
       - name: Assemble the application
         shell: bash
         run: |
@@ -123,6 +140,7 @@ jobs:
             --type app-image \
             --name "$APP_NAME" \
             --app-version "$VERSION" \
+            --icon "$ICON" \
             --input target/dist/input \
             --main-jar app.jar \
             --main-class "$MAIN_CLASS" \
