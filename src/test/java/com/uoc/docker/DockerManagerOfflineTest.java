@@ -1,10 +1,5 @@
 package com.uoc.docker;
 
-import com.github.dockerjava.api.DockerClient;
-import com.github.dockerjava.core.DefaultDockerClientConfig;
-import com.github.dockerjava.core.DockerClientImpl;
-import com.github.dockerjava.zerodep.ZerodepDockerHttpClient;
-
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -21,31 +16,29 @@ import static org.assertj.core.api.Assertions.assertThat;
  * What the panel shows when Docker is not there.
  *
  * <p>A student can quit Docker Desktop while the launcher is open, and the services must
- * not stay frozen on the last thing that was true. This points the manager at a daemon
- * that does not exist, which is the same thing from its side and needs no Docker to run.
+ * not stay frozen on the last thing that was true. Every Docker command answers here the
+ * way it does with no daemon behind it, which is the same thing from the manager's side
+ * and needs no Docker to run.
  */
 @DisplayName("when the Docker daemon cannot be reached")
 class DockerManagerOfflineTest {
 
     private static final Duration LIMIT = Duration.ofSeconds(30);
 
+    /** Word for word what the command line says with nothing listening. */
+    private static final String NO_DAEMON = "Cannot connect to the Docker daemon at "
+            + "unix:///var/run/docker.sock. Is the docker daemon running?";
+
     private final List<ServiceStatus> seen = new CopyOnWriteArrayList<>();
     private DockerManager manager;
 
-    /** A client aimed at a port nothing is listening on. */
-    private static DockerClient unreachableClient() {
-        DefaultDockerClientConfig config = DefaultDockerClientConfig.createDefaultConfigBuilder()
-                .withDockerHost("tcp://127.0.0.1:1")
-                .build();
-        return DockerClientImpl.getInstance(config, new ZerodepDockerHttpClient.Builder()
-                .dockerHost(config.getDockerHost())
-                .connectionTimeout(Duration.ofSeconds(2))
-                .responseTimeout(Duration.ofSeconds(2))
-                .build());
+    /** Refuses every command the way the command line does with no daemon behind it. */
+    private static ProcessRunner deadDaemon() {
+        return (command, stdin) -> new ProcessRunner.Result(1, NO_DAEMON);
     }
 
     private DockerManager managerFor(ProcessRunner processRunner) {
-        manager = new DockerManager(unreachableClient(), processRunner, Runnable::run,
+        manager = new DockerManager(processRunner, Runnable::run,
                 Path.of("docker-compose.yml"));
         manager.setListener((key, status) -> seen.add(status));
         return manager;
@@ -150,8 +143,10 @@ class DockerManagerOfflineTest {
     @Test
     void aServiceWhoseStateCannotBeReadIsShownAsFailed() {
         // Not "stopped": the launcher does not know that, and saying so would invite the
-        // student to press start on a service that may well be running.
-        managerFor((command, stdin) -> new ProcessRunner.Result(0, ""));
+        // student to press start on a service that may well be running. What separates
+        // the two is only the message, since an inspect that finds no container and one
+        // that finds no daemon both come back as a failure.
+        managerFor(deadDaemon());
 
         manager.refreshStatus(Database.REDIS.key());
 
@@ -160,12 +155,12 @@ class DockerManagerOfflineTest {
 
     @Test
     void everyServiceBeingWatchedIsMarkedWhenTheDaemonGoesAway() {
-        managerFor((command, stdin) -> new ProcessRunner.Result(0, ""));
+        managerFor(deadDaemon());
         manager.refreshStatus(Database.REDIS.key());
         awaitStatus(ServiceStatus.ERROR);
 
-        // Starting the event stream against a daemon that is not there is the same thing
-        // that happens when it disappears while the launcher is open. The service is
+        // An event stream that ends the moment it is asked for is the same thing that
+        // happens when the daemon disappears while the launcher is open. The service is
         // already shown as failed, and a status that has not changed is not announced a
         // second time: the panel is already saying the right thing, and repainting it
         // would restart its animation for nothing.
@@ -206,7 +201,7 @@ class DockerManagerOfflineTest {
 
     @Test
     void closingTheManagerStopsItReportingAnything() {
-        managerFor((command, stdin) -> new ProcessRunner.Result(0, ""));
+        managerFor(deadDaemon());
         manager.start();
         manager.refreshStatus(Database.REDIS.key());
         awaitStatus(ServiceStatus.ERROR);
@@ -214,8 +209,9 @@ class DockerManagerOfflineTest {
         manager.close();
         seen.clear();
 
-        // Closing must not paint the panel red on the way out, and must not throw from
-        // the stream callback that Docker fires as the connection is torn down.
+        // Closing must not paint the panel red on the way out. Ending the event stream
+        // looks exactly like the stream ending by itself, which is the daemon going away,
+        // and a manager on its way out must not report that as news.
         try {
             Thread.sleep(1500);
         } catch (InterruptedException e) {

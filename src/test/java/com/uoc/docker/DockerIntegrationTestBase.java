@@ -96,17 +96,6 @@ abstract class DockerIntegrationTestBase {
         return result.output().trim().equals("true");
     }
 
-    /** A client aimed at the same daemon the application would use. */
-    static com.github.dockerjava.api.DockerClient dockerClient() {
-        var config = com.github.dockerjava.core.DefaultDockerClientConfig
-                .createDefaultConfigBuilder().build();
-        var httpClient = new com.github.dockerjava.zerodep.ZerodepDockerHttpClient.Builder()
-                .dockerHost(config.getDockerHost())
-                .sslConfig(config.getSSLConfig())
-                .build();
-        return com.github.dockerjava.core.DockerClientImpl.getInstance(config, httpClient);
-    }
-
     private static String healthOf(Database database) {
         ProcessRunner.Result result = PROCESS.run(List.of(
                 DockerCommand.EXECUTABLE, "inspect",
