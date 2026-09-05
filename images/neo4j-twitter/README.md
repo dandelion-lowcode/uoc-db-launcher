@@ -10,9 +10,17 @@ like any other image.
 **This image cannot be built from a clean clone**, by design. Three of the files the
 Dockerfile copies are missing here, and a rebuild has to put all three back first:
 
-| Missing file | Size | Where a rebuild gets it |
+All three are kept together on the `twitter-1.0` release of
+`dandelion-lowcode/uocdb-datasets`, a private repository, and one command puts them back:
+
+    gh release download twitter-1.0 --repo dandelion-lowcode/uocdb-datasets \
+       --dir images/neo4j-twitter
+
+which lands the jars beside the dump rather than in `plugins/`; move them in.
+
+| Missing file | Size | Where else it comes from |
 |---|---|---|
-| `twitter.dump` | 336 MB | The course's own export. It is published nowhere: it comes from the machine that built the image, or from the course team. |
+| `twitter.dump` | 336 MB | Nowhere public: it is the course's own export, and it holds a real social graph, which is why the repository holding it is private. Before that release existed, the only copy was on the machine that built the image. |
 | `plugins/apoc-3.5.0.9-all.jar` | 15 MB | `neo4j-contrib/neo4j-apoc-procedures` on GitHub, release `3.5.0.9`, the `-all` asset. |
 | `plugins/graph-algorithms-algo-3.5.3.4.jar` | 1.4 MB | `neo4j-contrib/neo4j-graph-algorithms` on GitHub, release `3.5.3.4`. |
 
@@ -40,7 +48,8 @@ the compose file then pulls it exactly like it pulls MongoDB or Redis.
 
 ## Rebuilding it
 
-With the three missing files put back in this directory:
+With the three missing files put back in this directory, by the command above or by
+hand:
 
     docker build -t ghcr.io/dandelion-lowcode/uocdb-neo4j-twitter:<version> .
     docker push  ghcr.io/dandelion-lowcode/uocdb-neo4j-twitter:<version>
