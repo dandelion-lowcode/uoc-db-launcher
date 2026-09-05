@@ -2,6 +2,12 @@ package com.uoc;
 
 import java.awt.BorderLayout;
 import java.awt.Desktop;
+import java.awt.Dimension;
+import java.awt.GraphicsConfiguration;
+import java.awt.GraphicsEnvironment;
+import java.awt.Insets;
+import java.awt.Rectangle;
+import java.awt.Toolkit;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URI;
@@ -43,11 +49,17 @@ public class Launcher {
     private static final String APP_ICON = "icons/icon.svg";
     private static final String JUPYTER_URL = "http://localhost:8888/tree/notebooks";
 
-    private static final int WINDOW_WIDTH = 800;
-    // Tall enough that the transcript and the box below it both have room to read:
-    // the
-    // console is where the student spends the session, not the panel beside it.
-    private static final int WINDOW_HEIGHT = 560;
+    /**
+     * The window a student sees the first time, sixteen by nine.
+     *
+     * <p>
+     * Wide enough for the eleven tabs to sit in one row without a scroll button, and tall
+     * enough that the transcript and the box below it both have room to read: the console
+     * is where the session is spent, not the panel beside it. It is a starting size, not
+     * a limit, and it is brought down to fit a screen that is smaller than it.
+     */
+    private static final int WINDOW_WIDTH = 1280;
+    private static final int WINDOW_HEIGHT = 720;
     private static final int CONTENT_GAP = 10;
 
     public static void main(String[] args) {
@@ -108,9 +120,32 @@ public class Launcher {
         frame.setJMenuBar(buildMenuBar(frame, themeManager, fontManager, translations, tabs,
                 dockerManager, servicesPanel, tutorialManager, preferences));
         frame.setContentPane(buildContentPane(tabs.getComponent(), servicesPanel));
-        frame.setSize(WINDOW_WIDTH, WINDOW_HEIGHT);
+        frame.setSize(startingSize(frame));
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
+    }
+
+    /**
+     * The starting size, or as much of it as the screen has room for.
+     *
+     * <p>
+     * A 1366 by 768 laptop, which is what a good many students bring, cannot show 1280 by
+     * 720 once the taskbar has taken its share. A window taller than the screen puts its
+     * own bottom -- the box the student types into -- somewhere they cannot reach, and
+     * they have no reason to suspect the window rather than the launcher.
+     */
+    private static Dimension startingSize(JFrame frame) {
+        GraphicsConfiguration screen = frame.getGraphicsConfiguration() != null
+                ? frame.getGraphicsConfiguration()
+                : GraphicsEnvironment.getLocalGraphicsEnvironment()
+                        .getDefaultScreenDevice().getDefaultConfiguration();
+
+        Rectangle bounds = screen.getBounds();
+        Insets taken = Toolkit.getDefaultToolkit().getScreenInsets(screen);
+
+        return new Dimension(
+                Math.min(WINDOW_WIDTH, bounds.width - taken.left - taken.right),
+                Math.min(WINDOW_HEIGHT, bounds.height - taken.top - taken.bottom));
     }
 
     private static JMenuBar buildMenuBar(JFrame frame, ThemeManager themeManager,
