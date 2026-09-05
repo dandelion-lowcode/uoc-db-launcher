@@ -1,0 +1,59 @@
+# Runs the tests. The packaging workflow builds with -DskipTests and says these run
+# somewhere else; this is that somewhere else.
+#
+# They are split in two because they cost different things. The ones that need nothing
+# but a JVM run on every push, take a minute, and are what should be green before a tag
+# is ever cut. The ones that drive real containers pull several gigabytes of images and
+# start ten databases, so they are asked for rather than assumed: on a tag, where the
+# cost is worth paying, and by hand whenever anything about a service changes.
+
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  JAVA_VERSION: "25"
+
+jobs:
+  unit:
+    name: Without Docker
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      # The integration group is excluded by the POM, so this is the default run.
+      - name: Run the tests that need no containers
+        run: mvn -B test
+
+  integration:
+    name: Against real containers
+    runs-on: ubuntu-latest
+    # A tag is about to publish four executables, which is the moment to find out that a
+    # console no longer answers what it promises.
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    # Ten databases, pulled and started one at a time. Vertica alone is a gigabyte.
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      # The runner has a daemon already; what it does not have is the images, and every
+      # one of them is pulled by the tests themselves as each service is started.
+      - name: Run every test, containers included
+        run: mvn -B test -Dexcluded.groups=

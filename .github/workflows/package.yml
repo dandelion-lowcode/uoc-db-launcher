@@ -56,8 +56,8 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
-      # The tests need a Docker daemon with seven databases on it, which only the Linux
-      # runner has. They run in their own workflow; this one only packages.
+      # The tests run in test.yml, which the same tag triggers, containers and all. Here
+      # they would run four times over, three of them on a machine with no Docker.
       - name: Build the jar and gather its dependencies
         shell: bash
         run: |
