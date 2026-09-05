@@ -80,6 +80,33 @@
     </dependencies>
 
     <build>
+        <!--
+            Every build context an image of this course is built from lives under
+            images/, so that they are found, and reasoned about, in one place. Riak and
+            Jupyter are the two still built on the student's own machine rather than
+            pulled, and Compose builds them from a directory beside the compose file it
+            reads, which is the copy unpacked out of the jar.
+
+            So those two are carried into the bundled docker/ tree from images/ rather
+            than kept under src/main/resources as a second copy. Two copies of a
+            Dockerfile drift, and the one that drifts is the one nobody is looking at.
+
+            Both entries come out on the day those images are published and the compose
+            file pulls them instead; images/README.md holds that change ready to apply.
+        -->
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+            </resource>
+            <resource>
+                <directory>images/riak</directory>
+                <targetPath>docker/riak</targetPath>
+            </resource>
+            <resource>
+                <directory>images/jupyter</directory>
+                <targetPath>docker/jupyter</targetPath>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

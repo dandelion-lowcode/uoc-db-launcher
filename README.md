@@ -53,14 +53,14 @@ student needs no JDK.
         i18n/            Catalan, Spanish and English, switchable while running
         platform/        The three questions the operating system answers differently
     src/main/resources/
-        docker/          docker-compose.yml and the two images built locally
+        docker/          docker-compose.yml, the one definition of every service
         i18n/            The translations, and the worked example each console shows
         themes/          The FlatLaf palettes, ANSI colours included
         notebooks/       What Jupyter opens
         icons/           One per service, plus the application's own
     src/main/packaging/  The application icon in the formats jpackage demands
-    images/              The build contexts for the images published to GHCR by hand,
-                         one directory each, none of them built on a student's machine
+    images/              One directory per image the course builds for itself, whether it
+                         is published or, in Riak's and Jupyter's case, not yet
 
 ## The prepared images
 
@@ -79,8 +79,17 @@ gets them; the ArangoDB one says why its Dockerfile ends in a symbolic link that
 pointless and is not. Neither is built by a student or by CI: the compose file names a
 published version, and that is all a student's machine ever sees.
 
-Riak and Jupyter are built on the student's own machine, from
-`src/main/resources/docker/`.
+Riak and Jupyter are the two the compose file still builds, on the student's own machine,
+from `images/riak/` and `images/jupyter/`. They are meant to be published like the other
+two, and `images/README.md` holds that change written out step by step -- the builds, the
+compose lines, and what else has to move with them -- waiting only on somebody with
+access to push the images. Until they exist, the `build:` entries stay: a compose file
+naming an image nobody can pull leaves every student unable to start the service.
+
+Because Compose builds from a directory beside the compose file, and the compose file is
+unpacked out of the jar, `pom.xml` copies those two contexts into the bundled `docker/`
+tree at build time. That is the alternative to keeping a second copy of each Dockerfile
+under `src/main/resources`, and it comes out when they are published.
 
 ## Where a student's things are kept
 

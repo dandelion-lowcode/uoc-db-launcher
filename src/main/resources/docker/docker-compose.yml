@@ -98,8 +98,13 @@ services:
   # the node refuse to start. Pinning the address keeps the node name stable.
   riak:
     # Riak is covered in theory only, so what matters here is that a student can try the
-    # requests from the notes without downloading a gigabyte for it. See the Dockerfile
-    # for why the image Basho left behind is not used.
+    # requests from the notes without downloading a gigabyte for it. See the Dockerfile,
+    # now in images/riak/, for why the image Basho left behind is not used.
+    #
+    # Built here rather than pulled, unlike every other service, only because nobody has
+    # published this image yet. The directory named below is put beside this file when
+    # the application is built, out of images/riak/, and images/README.md holds the
+    # change that switches this to a pull, ready for the day there is something to pull.
     build: ./riak
     container_name: uocdb-riak
     hostname: uocdb-riak
@@ -223,6 +228,11 @@ services:
       start_period: 30s
 
   jupyter:
+    # Built on the student's machine for the same reason as riak, and at a worse price: a
+    # first run of several minutes and a pip install of two dozen packages that needs the
+    # network to succeed, on the one machine this launcher exists to keep simple. The tag
+    # below is also the only unpinned name here, because a locally built image has no
+    # version to be given. images/README.md holds the change that ends both.
     build:
       context: ./jupyter
     image: uocdb-jupyter:latest
