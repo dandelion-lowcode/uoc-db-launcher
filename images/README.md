@@ -20,7 +20,9 @@ Each directory that needs one holds a README saying what it needs that the repos
 cannot carry. The compose file names a version, never `latest`, so a student who starts
 the course six months from now gets the database the exercises were written against.
 
-`riak/` and `jupyter/` are the exception, and the rest of this file is about closing it.
+`riak/` and `jupyter/` are the exception, and the next section is about closing it. The
+last section is about a fifth image that has no directory here, because there is nothing
+to build: Vertica, which the course takes from one person's Docker Hub account.
 
 ## The two that are still built on a student's machine
 
@@ -142,3 +144,64 @@ test whole.
 The last one must show `image:` and no `build:` for either service, and must still show
 the notebooks mount. Then start both from the launcher on a machine that has never
 pulled them, which is the only test that proves a student can.
+
+## Vertica, which hangs on one person's Docker Hub account
+
+The `vertica` service pulls `josepmeseguer/vertica-ce:24.1.0-0`. That is one person's
+Docker Hub account, and nobody here has any claim on it. If it is deleted, renamed or
+emptied, the course loses a database, and loses it on the morning a student first clicks
+the service rather than at a moment anyone chose.
+
+**The image is not being changed.** That was decided deliberately: this pinned version is
+the one the course material was written against, and its VMart schema is what the
+exercises ask questions about. Moving to another publisher, or another version, is a
+change to the material as much as to this file, and it should not be made in the hour the
+original disappears. What follows is the insurance instead -- a copy of these exact bytes
+under a name the course controls, ready to switch to on the day it is needed.
+
+### Mirroring it
+
+Copy the manifest across without a 2.7 GB round trip through this machine:
+
+    docker login ghcr.io
+    docker buildx imagetools create \
+        --tag ghcr.io/dandelion-lowcode/uocdb-vertica:24.1.0-0 \
+        josepmeseguer/vertica-ce:24.1.0-0
+
+or, with the image already pulled, the plain three:
+
+    docker pull josepmeseguer/vertica-ce:24.1.0-0
+    docker tag  josepmeseguer/vertica-ce:24.1.0-0 ghcr.io/dandelion-lowcode/uocdb-vertica:24.1.0-0
+    docker push ghcr.io/dandelion-lowcode/uocdb-vertica:24.1.0-0
+
+Then make the GHCR package public, as with the others. Keep the tag exactly `24.1.0-0`:
+the mirror is a copy, not a new version, and a tag that says anything else invites
+somebody to believe the two differ.
+
+The copy this machine holds is
+
+    josepmeseguer/vertica-ce@sha256:9248dbc3ee429827f89a96758b88d7a286762d50918e2e4bbfcda2dd18cb1cd9
+
+which is worth comparing against the registry before mirroring, and against the mirror
+afterwards. A tag can be moved by whoever owns it; a digest cannot.
+
+### Switching to it, if that day comes
+
+In `src/main/resources/docker/docker-compose.yml`, the `vertica` service begins
+
+      vertica:
+        image: josepmeseguer/vertica-ce:24.1.0-0
+        platform: linux/amd64
+
+and only the first of those two lines changes:
+
+      vertica:
+        # A mirror of josepmeseguer/vertica-ce:24.1.0-0, the same bytes under a name the
+        # course controls. The original was one person's Docker Hub account, and one
+        # deletion away from taking a database of this course with it.
+        image: ghcr.io/dandelion-lowcode/uocdb-vertica:24.1.0-0
+        platform: linux/amd64
+
+`platform: linux/amd64` stays. The image is amd64 only, and saying so is what makes
+Docker tell an Apple Silicon student it is emulating rather than fail with an exec format
+error. Nothing else about the service changes, because nothing else about the image does.

@@ -91,6 +91,14 @@ unpacked out of the jar, `pom.xml` copies those two contexts into the bundled `d
 tree at build time. That is the alternative to keeping a second copy of each Dockerfile
 under `src/main/resources`, and it comes out when they are published.
 
+One more image belongs to nobody here. `vertica` pulls `josepmeseguer/vertica-ce:24.1.0-0`
+from a personal Docker Hub account: that version is the one the course material was
+written against, which is why it is pinned and why it is being left alone. It is a single
+point of failure all the same -- if the account goes, the course loses a database, on the
+morning a student clicks it. `images/README.md` holds the commands that mirror those
+exact bytes to GHCR and the one compose line to change afterwards, so that the answer
+that day takes minutes rather than a term.
+
 ## Where a student's things are kept
 
 The application unpacks the compose file and the notebooks into the user's own data
