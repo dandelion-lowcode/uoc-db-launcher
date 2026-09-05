@@ -18,6 +18,12 @@
     </properties>
 
     <dependencies>
+        <!--
+            The look and feel is the whole of what the application ships. Docker is not a
+            dependency at all: every command goes through the docker executable on the
+            PATH, which a student has anyway, since Docker Desktop is what the launcher
+            exists to drive.
+        -->
         <dependency>
             <groupId>com.formdev</groupId>
             <artifactId>flatlaf</artifactId>
@@ -28,11 +34,6 @@
             <artifactId>flatlaf-extras</artifactId>
             <version>3.7.2</version>
         </dependency>
-        <!--
-            Docker itself is not a dependency: every command goes through the docker
-            executable on the PATH, which a student has anyway, since Docker Desktop is
-            what the launcher exists to drive.
-        -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>

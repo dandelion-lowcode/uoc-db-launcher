@@ -51,7 +51,7 @@ public class DockerManager {
      */
     private static final String EVENT_FORMAT = "{{.Actor.Attributes.name}}\t{{.Action}}";
 
-    private static final char FIELD_SEPARATOR = '\t';
+    private static final String FIELD_SEPARATOR = "\t";
 
     private static final String INSPECT = "inspect";
 
@@ -304,7 +304,7 @@ public class DockerManager {
         }
 
         String key = DockerCommand.serviceKey(name);
-        String action = line.substring(separator + 1);
+        String action = line.substring(separator + FIELD_SEPARATOR.length());
         if (!SIGNIFICANT_ACTIONS.contains(baseAction(action))) {
             return;
         }
@@ -325,7 +325,7 @@ public class DockerManager {
      * the container is inspected either way.
      */
     private static String baseAction(String action) {
-        String normalized = action.trim().toLowerCase(java.util.Locale.ROOT);
+        String normalized = action.trim().toLowerCase(Locale.ROOT);
         int colon = normalized.indexOf(':');
         return colon < 0 ? normalized : normalized.substring(0, colon).trim();
     }
@@ -386,10 +386,9 @@ public class DockerManager {
     }
 
     private void reconcileStatus(String key) {
-        reporter.observe(key, observationOf(processRunner.run(
-                List.of(DockerCommand.EXECUTABLE, INSPECT, FORMAT, STATE_FORMAT,
-                        DockerCommand.containerName(key)),
-                null)));
+        ProcessRunner.Result answer = processRunner.run(List.of(DockerCommand.EXECUTABLE,
+                INSPECT, FORMAT, STATE_FORMAT, DockerCommand.containerName(key)), null);
+        reporter.observe(key, observationOf(answer));
     }
 
     /**
@@ -415,8 +414,10 @@ public class DockerManager {
                     : Observation.DAEMON_LOST;
         }
 
+        // Kept whole rather than stripped: with no healthcheck the line ends in a
+        // separator with nothing after it, and trimming would leave one field short.
         String[] state = answer.output().lines().findFirst().orElse("")
-                .split(String.valueOf(FIELD_SEPARATOR), -1);
+                .split(FIELD_SEPARATOR, -1);
         return Observation.of(field(state, STATUS), Boolean.parseBoolean(field(state, OOM_KILLED)),
                 exitCode(field(state, EXIT_CODE)), field(state, HEALTH));
     }
