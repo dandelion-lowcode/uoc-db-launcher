@@ -59,20 +59,25 @@ student needs no JDK.
         notebooks/       What Jupyter opens
         icons/           One per service, plus the application's own
     src/main/packaging/  The application icon in the formats jpackage demands
+    images/              The build contexts for the images published to GHCR by hand,
+                         one directory each, none of them built on a student's machine
 
 ## The prepared images
 
-Two services do not use a published image as it comes. Their build contexts are **not in
-this repository**, and neither can be rebuilt from a clean clone of it alone:
+Two services do not use a published image as it comes. Both are built by hand from a
+build context in `images/`, pushed to GHCR, and then pulled by `docker-compose.yml` like
+any other image:
 
-| Image | What it carries | Where it is built from |
+| Image | What it carries | Built from |
 |---|---|---|
-| `ghcr.io/dandelion-lowcode/uocdb-neo4j-twitter:1.0` | 3.9M nodes, 5.5M relations | `uocdb-neo4j-twitter/`, which needs a 336 MB dump and a plugin jar that are not under version control |
-| `ghcr.io/dandelion-lowcode/uocdb-arangodb-imdb:1.0` | The IMDB graph, in a database called `IMDB` | `uocdb-arangodb-imdb/`, which downloads the dataset during the build |
+| `ghcr.io/dandelion-lowcode/uocdb-neo4j-twitter:1.0` | 3.9M nodes, 5.5M relations | `images/neo4j-twitter/`, which needs a 336 MB dump and two plugin jars that no repository can hold |
+| `ghcr.io/dandelion-lowcode/uocdb-arangodb-imdb:1.0` | The IMDB graph, in a database called `IMDB` | `images/arangodb-imdb/`, which downloads the dataset during the build |
 
-Both are published to GHCR by hand and pulled by `docker-compose.yml` like any other
-image. Each directory holds a README saying how to republish it and, in the ArangoDB
-case, why its Dockerfile ends in a symbolic link that looks pointless and is not.
+Only the ArangoDB one rebuilds from a clean clone. The Neo4j one needs three files put
+back beside its Dockerfile first, and its README says which they are and where a rebuild
+gets them; the ArangoDB one says why its Dockerfile ends in a symbolic link that looks
+pointless and is not. Neither is built by a student or by CI: the compose file names a
+published version, and that is all a student's machine ever sees.
 
 Riak and Jupyter are built on the student's own machine, from
 `src/main/resources/docker/`.

@@ -1,0 +1,6 @@
+# The three files a rebuild needs here are deliberately not in the repository, and the
+# README says where they come from. They are ignored rather than merely left out because
+# a 336 MB file is far easier to commit by accident than to take out of a history, and
+# GitHub would refuse the push at the far end of that mistake anyway.
+twitter.dump
+plugins/

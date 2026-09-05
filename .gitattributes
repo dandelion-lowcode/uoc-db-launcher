@@ -7,6 +7,10 @@
 *.sh text eol=lf
 Dockerfile text eol=lf
 *.yml text eol=lf
+# neo4j.conf is the same story with a quieter failure: Neo4j reads a setting as
+# everything after the "=", so a carriage return travels into the value and the setting
+# is rejected as malformed, one line at a time, in a log nobody reads.
+*.conf text eol=lf
 
 *.jar binary
 *.dump binary
