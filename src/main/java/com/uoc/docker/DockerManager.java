@@ -243,7 +243,7 @@ public class DockerManager {
         reporter.retrying(key);
         reporter.enterPhase(key, action == ServiceAction.START ? Phase.STARTING : Phase.STOPPING);
 
-        executor.submit(() -> {
+        boolean accepted = submit(() -> {
             try {
                 if (action == ServiceAction.START) {
                     // Asked before starting, because once it is under way there is no
@@ -259,6 +259,33 @@ public class DockerManager {
                 finished(key);
             }
         });
+
+        if (!accepted) {
+            // Nothing will run, so nothing will hand the service back, and a service
+            // never handed back is one no later request can ever act on.
+            running.remove(key);
+        }
+    }
+
+    /**
+     * Hands work to the pool, and says whether the pool took it.
+     *
+     * <p>
+     * Everything submitted here is a Docker command run to find out what a service is
+     * now. Once the launcher is closing there is nobody left to tell, so a refusal is the
+     * expected answer rather than a fault: the alternative is a stack trace on the way
+     * out, from a window that has already gone.
+     */
+    private boolean submit(Runnable work) {
+        if (closed) {
+            return false;
+        }
+        try {
+            executor.submit(work);
+            return true;
+        } catch (RejectedExecutionException e) {
+            return false;
+        }
     }
 
     /** Hands the service back, and takes up whatever was asked for while it was busy. */
