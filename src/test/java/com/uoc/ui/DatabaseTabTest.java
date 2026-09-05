@@ -85,7 +85,7 @@ class DatabaseTabTest {
         });
 
         input = (JTextArea) find(DatabaseTab.INPUT);
-        session = (JTextComponent) find(DatabaseTab.SESSION);
+        session = (JTextComponent) find(ConsoleTrace.SESSION);
         send = (AbstractButton) find(DatabaseTab.SEND);
         clear = (AbstractButton) find(DatabaseTab.CLEAR);
     }

@@ -53,7 +53,7 @@ class ConsoleZoomTest {
             tab.registerTranslations(new Translations(Locale.ENGLISH));
         });
         input = (JTextArea) find(DatabaseTab.INPUT);
-        session = (JTextComponent) find(DatabaseTab.SESSION);
+        session = (JTextComponent) find(ConsoleTrace.SESSION);
     }
 
     @AfterEach
