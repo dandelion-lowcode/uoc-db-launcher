@@ -1,15 +1,16 @@
 package com.uoc.ui.menu;
 
+import java.util.EnumMap;
+import java.util.Map;
+import java.util.function.Consumer;
+
+import javax.swing.JCheckBoxMenuItem;
+import javax.swing.JMenu;
+
 import com.uoc.docker.Database;
 import com.uoc.i18n.Message;
 import com.uoc.i18n.Translations;
 import com.uoc.ui.DatabaseTabs;
-
-import javax.swing.JCheckBoxMenuItem;
-import javax.swing.JMenu;
-import java.util.EnumMap;
-import java.util.Map;
-import java.util.function.Consumer;
 
 public class DatabasesMenu {
 
@@ -23,10 +24,9 @@ public class DatabasesMenu {
 
         Database previous = null;
         for (Database database : tabs.databases()) {
-            // Three groups, each divided from the last: the databases the course works
-            // through, the ones it only mentions, and Jupyter, which is not a database.
-            if (previous != null && (previous.kind() != database.kind()
-                    || previous.isShownByDefault() != database.isShownByDefault())) {
+            // A line wherever the block changes. Which block each service is in is said
+            // once, in the enum, so adding one never means coming back here.
+            if (previous != null && previous.group() != database.group()) {
                 menu.addSeparator();
             }
             previous = database;
@@ -37,7 +37,10 @@ public class DatabasesMenu {
             items.put(database, item);
             item.addActionListener(e -> {
                 if (item.isSelected()) {
-                    tabs.show(database);
+                    // Brought to the front, not merely added: ticking a service here is
+                    // asking to work with it, and leaving its tab behind the one already
+                    // open makes the menu look as though it did nothing.
+                    tabs.reveal(database);
                     onStart.accept(database.key());
                 } else {
                     tabs.hide(database);

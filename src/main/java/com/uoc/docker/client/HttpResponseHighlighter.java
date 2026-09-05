@@ -22,9 +22,16 @@ final class HttpResponseHighlighter {
 
     private static final Pattern STATUS_LINE = Pattern.compile("^HTTP/[0-9.]+ ([0-9]{3})\\b.*");
     private static final Pattern HEADER_LINE = Pattern.compile("^([A-Za-z0-9-]+): (.*)$");
-    // Both the client and the shell that runs it report failures the same way, whether the
-    // request could not be made, the flags were wrong or the command was mistyped.
-    private static final Pattern ERROR_LINE = Pattern.compile("^(curl|sh): .*");
+    /**
+     * Both the client and the shell that runs it report failures the same way, whether
+     * the request could not be made, the flags were wrong or the command was mistyped.
+     *
+     * <p>
+     * Two fixed prefixes, so they are compared as such. Written as the pattern
+     * {@code ^(curl|sh): .*} it said the same thing in a language that has to be parsed
+     * to be read, for a test any two string comparisons make.
+     */
+    private static final String[] ERROR_PREFIXES = { "curl: ", "sh: " };
 
     private static final String RESET = AnsiEscCode.RESET.escCode;
     private static final String BOLD = AnsiEscCode.BOLD.escCode;
@@ -57,10 +64,20 @@ final class HttpResponseHighlighter {
         return result.toString();
     }
 
+    /** Whether the line is the client or its shell complaining rather than a response. */
+    private static boolean isClientFailure(String line) {
+        for (String prefix : ERROR_PREFIXES) {
+            if (line.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static String decorate(String line, boolean inHeaders, boolean responseStarted) {
         // A client or shell failure means no response arrived at all. Once one has, the
         // same words are part of what the database stored and must be left as content.
-        if (!responseStarted && ERROR_LINE.matcher(line).matches()) {
+        if (!responseStarted && isClientFailure(line)) {
             return AnsiEscCode.RED.escCode + BOLD + line + RESET;
         }
         if (!inHeaders) {

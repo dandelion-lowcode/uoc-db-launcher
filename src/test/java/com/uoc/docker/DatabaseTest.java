@@ -1,16 +1,15 @@
 package com.uoc.docker;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
 class DatabaseTest {
-
     @ParameterizedTest
     @EnumSource(Database.class)
     void aDatabaseIsFoundBackFromItsOwnKey(Database database) {
@@ -70,29 +69,62 @@ class DatabaseTest {
     }
 
     @Test
-    void theCourseShowsThreeDatabasesAndOffersFourMoreServicesOnRequest() {
+    void eachBlockOfTheMenuHoldsTheServicesItIsNamedAfter() {
+        // The menu draws a line wherever the group changes, so this order is the order
+        // the student sees. Pinning it here is what stops a service being added to the
+        // wrong block.
+        assertThat(Database.values()).filteredOn(d -> d.group() == Database.Group.GENERAL)
+                .containsExactly(Database.MONGO, Database.CASSANDRA, Database.NEO4J);
+        assertThat(Database.values()).filteredOn(d -> d.group() == Database.Group.BACHELOR_COURSE)
+                .containsExactly(Database.NEO4J_TWITTER, Database.REDIS, Database.RIAK);
+        assertThat(Database.values())
+                .filteredOn(d -> d.group() == Database.Group.OPTIMIZATION_COURSE)
+                .containsExactly(Database.COCKROACHDB, Database.VERTICA, Database.ARANGODB,
+                        Database.ELASTICSEARCH);
+        assertThat(Database.values()).filteredOn(d -> d.group() == Database.Group.JUPYTER)
+                .containsExactly(Database.JUPYTER);
+    }
+
+    @Test
+    void everyGroupIsOneUnbrokenRunSoTheMenuNeedsOnlyOneSeparatorBetweenBlocks() {
+        // Were a group to come back after another, the menu would draw a second line for
+        // it and the block would look like two.
+        java.util.List<Database.Group> blocks = new java.util.ArrayList<>();
+        for (Database database : Database.values()) {
+            if (blocks.isEmpty() || blocks.get(blocks.size() - 1) != database.group()) {
+                blocks.add(database.group());
+            }
+        }
+        assertThat(blocks).doesNotHaveDuplicates();
+    }
+
+    @Test
+    void theCourseShowsThreeDatabasesAndOffersTheRestOnRequest() {
         assertThat(Database.values()).filteredOn(Database::isShownByDefault)
                 .containsExactly(Database.MONGO, Database.CASSANDRA, Database.NEO4J);
         assertThat(Database.values()).filteredOn(d -> !d.isShownByDefault())
                 .containsExactly(Database.NEO4J_TWITTER, Database.REDIS, Database.RIAK,
-                        Database.JUPYTER);
+                        Database.COCKROACHDB, Database.VERTICA, Database.ARANGODB,
+                        Database.ELASTICSEARCH, Database.JUPYTER);
     }
 
     @Test
     void jupyterIsTheOnlyServiceThatIsNotADatabase() {
-        // Everything that sets it apart follows from this: no console to type at, and no
+        // Everything that sets it apart follows from this: no console to type at, and
+        // no
         // healthcheck to wait for.
         assertThat(Database.values()).filteredOn(d -> d.kind() == Database.Kind.NOTEBOOK)
                 .containsExactly(Database.JUPYTER);
         assertThat(Database.JUPYTER.hasQueryConsole()).isFalse();
-        assertThat(Database.JUPYTER.reportsHealth()).isFalse();
     }
 
     @Test
-    void everyDatabaseIsQueriedAndJudgedByItsHealthcheck() {
+    void everyDatabaseIsQueriedFromAConsole() {
+        // Readiness is not asked of the enum any more: a service with no healthcheck is
+        // recognised from what Docker reports about it, so Jupyter needs no rule of its
+        // own. See ServiceState.
         assertThat(Database.values()).filteredOn(d -> d.kind() == Database.Kind.DATABASE)
-                .allMatch(Database::hasQueryConsole)
-                .allMatch(Database::reportsHealth);
+                .allMatch(Database::hasQueryConsole);
     }
 
     @Test

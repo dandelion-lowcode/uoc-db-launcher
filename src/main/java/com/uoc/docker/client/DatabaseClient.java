@@ -24,7 +24,8 @@ import java.util.List;
  * {@link Database}, and nothing outside this package may add another.
  */
 public sealed interface DatabaseClient
-        permits MongoshClient, CqlshClient, CypherShellClient, RedisCliClient, RiakHttpClient {
+    permits MongoshClient, CqlshClient, CypherShellClient, RedisCliClient, RiakHttpClient,
+    CockroachSqlClient, ArangoshClient, VerticaSqlClient, ElasticsearchHttpClient {
 
     /** The client program and its arguments, appended after the container name. */
     List<String> command(String query);
@@ -60,6 +61,10 @@ public sealed interface DatabaseClient
             case NEO4J, NEO4J_TWITTER -> new CypherShellClient();
             case REDIS -> new RedisCliClient();
             case RIAK -> new RiakHttpClient();
+            case COCKROACHDB -> new CockroachSqlClient();
+            case ARANGODB -> new ArangoshClient();
+            case VERTICA -> new VerticaSqlClient();
+            case ELASTICSEARCH -> new ElasticsearchHttpClient();
             // Jupyter is worked on in a browser; nothing here can drive it, and asking
             // for a client is a mistake in the caller rather than something to guess at.
             case JUPYTER -> throw new IllegalArgumentException(

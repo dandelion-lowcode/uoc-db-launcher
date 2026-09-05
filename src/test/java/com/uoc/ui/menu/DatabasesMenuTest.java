@@ -1,10 +1,16 @@
 package com.uoc.ui.menu;
 
-import com.uoc.docker.Database;
-import com.uoc.docker.ProcessRunner;
-import com.uoc.docker.QueryRunner;
-import com.uoc.i18n.Translations;
-import com.uoc.ui.DatabaseTabs;
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.awt.Component;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+
+import javax.swing.JCheckBoxMenuItem;
+import javax.swing.JMenu;
+import javax.swing.JSeparator;
+import javax.swing.SwingUtilities;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -12,19 +18,20 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
-import javax.swing.JCheckBoxMenuItem;
-import javax.swing.JMenu;
-import javax.swing.JSeparator;
-import javax.swing.SwingUtilities;
-import java.awt.Component;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import com.uoc.docker.Database;
+import com.uoc.docker.ProcessRunner;
+import com.uoc.docker.QueryRunner;
+import com.uoc.i18n.Translations;
+import com.uoc.ui.DatabaseTabs;
 
 @DisplayName("the menu of available databases")
 class DatabasesMenuTest {
+
+    @org.junit.jupiter.api.BeforeAll
+    static void installTheThemeThatHoldsOurColours() {
+        com.formdev.flatlaf.FlatLaf.registerCustomDefaultsSource("themes");
+        com.formdev.flatlaf.FlatLightLaf.setup();
+    }
 
     private final List<String> started = new ArrayList<>();
     private final List<String> stopped = new ArrayList<>();
@@ -39,7 +46,8 @@ class DatabasesMenuTest {
         SwingUtilities.invokeAndWait(() -> {
             Translations translations = new Translations(Locale.ENGLISH);
             tabs = new DatabaseTabs(List.of(Database.values()),
-                    new QueryRunner(fakeProcess), translations);
+                    new QueryRunner(fakeProcess), translations, () -> {
+                    });
             menu = DatabasesMenu.build(tabs, started::add, stopped::add, translations);
         });
     }
@@ -83,6 +91,27 @@ class DatabasesMenuTest {
     }
 
     @Test
+    void tickingAnEntryBringsItsTabToTheFront() throws Exception {
+        // Opening it behind whatever was already there makes the menu look as though it
+        // did nothing at all.
+        onSwing(() -> itemFor(Database.RIAK).doClick());
+
+        assertThat(tabs.getComponent().getSelectedComponent())
+                .isSameAs(tabs.tabFor(Database.RIAK.key()).getPanel());
+    }
+
+    @Test
+    void tickingTheNotebooksBringsThemToTheFrontToo() throws Exception {
+        // Jupyter has no console behind its tab, so it is the one that has to reach the
+        // front by a different route than the databases.
+        onSwing(() -> itemFor(Database.JUPYTER).doClick());
+
+        assertThat(tabs.isShown(Database.JUPYTER)).isTrue();
+        assertThat(tabs.getComponent().getSelectedIndex())
+                .isEqualTo(tabs.getComponent().indexOfTab(Database.JUPYTER.displayName()));
+    }
+
+    @Test
     void untickingAnEntryClosesItsTabAndStopsTheService() throws Exception {
         JCheckBoxMenuItem mongo = itemFor(Database.MONGO);
 
@@ -94,7 +123,8 @@ class DatabasesMenuTest {
 
     @Test
     void startingAServiceFromElsewhereTicksItsEntry() throws Exception {
-        // The play button beside the services opens the tab. The menu is a report of what
+        // The play button beside the services opens the tab. The menu is a report of
+        // what
         // is showing, so it has to agree without the student touching it.
         assertThat(itemFor(Database.RIAK).isSelected()).isFalse();
 

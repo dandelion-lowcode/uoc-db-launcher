@@ -105,15 +105,114 @@ services:
       - "8087:8087"
       - "8098:8098"
     healthcheck:
-      # Asks for a key over HTTP, which is the path the console uses. A "not found" is a
-      # healthy answer and proves the key-value layer replied; a degraded node answers
-      # 500 instead, which "riak ping" never notices because the Erlang node is still up.
-      # A read is used rather than "riak-admin test", which writes to one fixed key and
-      # reports {error,locked} against its own previous run every few seconds.
-      test: ["CMD-SHELL", "code=$$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8098/riak/healthcheck/probe); case \"$$code\" in 2*|4*) exit 0;; *) exit 1;; esac"]
+      # Stores a key over HTTP, which is the first thing the notes have a student do. A
+      # read is not enough: watching a restart, this node answered 404 to everything for
+      # a moment, then 500 "all_nodes_down" for seventeen seconds, and reads were still
+      # answering 500 after writes had started working. A check that took "not found" for
+      # an answer called the service ready in the first of those moments, and the console
+      # then met the error the check had been written to catch.
+      #
+      # -f is what makes a 4xx or a 5xx a failure. "riak-admin test" is not used: it
+      # writes to one fixed key and reports {error,locked} against its own previous run
+      # every few seconds.
+      test: ["CMD-SHELL", "curl -sf -o /dev/null -XPUT -H 'Content-Type: text/plain' -d ok http://localhost:8098/riak/healthcheck/probe"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
+
+  cockroachdb:
+    image: cockroachdb/cockroach:v26.2.6
+    container_name: uocdb-cockroachdb
+    command: start-single-node --insecure
+    ports:
+      - "26257:26257"
+      # The web console, moved off 8080. On a student's own machine that port belongs to
+      # whatever they last built, and a service that refuses to start because something
+      # else holds a port it does not even need is a bad first impression. Inside the
+      # container it stays 8080, which is what the healthcheck below asks.
+      - "18080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS 'http://localhost:8080/health?ready=1' > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  arangodb:
+    # Carries the IMDB graph the module's tutorial works on, in a database called IMDB.
+    # The tutorial's first query is FOR v IN imdb_vertices RETURN v, and until this image
+    # existed there was nothing to answer it: the course's own 2024 setup downloaded the
+    # same dataset and unzipped it at the root of the filesystem, where nothing ever
+    # loaded it.
+    #
+    # Pulled rather than built, as neo4j-twitter is: the dataset is restored once, when
+    # the volume is new, instead of 43 MB of JSON travelling inside every download.
+    #
+    # The volumes also keep the notebook's work: a student who spends an evening loading
+    # Stack Overflow into it should not lose that the next time the service is recreated.
+    # They are named after the dataset, so that a student who ran an earlier version gets
+    # a new, empty volume and with it the restore; the old one stays on disk until they
+    # remove it.
+    image: ghcr.io/dandelion-lowcode/uocdb-arangodb-imdb:1.0
+    container_name: uocdb-arangodb
+    environment:
+      ARANGO_ROOT_PASSWORD: rootpassword
+    volumes:
+      - arangodb_imdb_data:/var/lib/arangodb3
+      - arangodb_imdb_apps_data:/var/lib/arangodb3-apps
+    ports:
+      - "8529:8529"
+    healthcheck:
+      # 127.0.0.1, not localhost. Inside this image localhost resolves to ::1 first and
+      # arangod listens only on IPv4, so the check answered "connection refused" for a
+      # server that was running perfectly and the service was never reported healthy.
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8529/_admin/server/availability"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      # Longer than the others because the first start restores the dataset before the
+      # server accepts anything, which is seconds on a fast disk and a good deal more on
+      # a laptop that is also unpacking the image. Failures inside this window do not
+      # count against the retries, so the cost of being generous is nothing.
+      start_period: 120s
+
+  vertica:
+    image: josepmeseguer/vertica-ce:24.1.0-0
+    platform: linux/amd64
+    container_name: uocdb-vertica
+    ports:
+      - "5433:5433"
+      - "5444:5444"
+    healthcheck:
+      # The full path: vsql is not on the PATH a healthcheck runs with, so as a bare name
+      # this failed with "command not found" every time and the service was never once
+      # reported healthy, however well it was running.
+      #
+      # It asks for the sample warehouse rather than SELECT 1, because the database
+      # answers a good three seconds before the image has finished creating VMart's
+      # tables in it. In that window the service was reported ready and every query about
+      # the data a student has come here for answered "0 rows".
+      test: ["CMD-SHELL", "/opt/vertica/bin/vsql -X -h localhost -U dbadmin -d VMart -tAc \"SELECT count(*) FROM tables WHERE table_schema='public'\" | grep -qv '^0$'"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
+    container_name: uocdb-elasticsearch
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    ports:
+      - "9200:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
       start_period: 30s
 
   jupyter:
@@ -131,6 +230,18 @@ services:
       # the notebooks side by side, so one path is right both when the application runs
       # from source and when it runs from an installed copy.
       - ${UOCDB_NOTEBOOKS:-../notebooks}:/home/jovyan/work/notebooks
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8888/tree', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+volumes:
+  # ArangoDB alone keeps its data across a recreate, because half of it is the student's:
+  # the image brings IMDB, the notebook builds Stack Overflow on top of it.
+  arangodb_imdb_data:
+  arangodb_imdb_apps_data:
 
 networks:
   uocdb:

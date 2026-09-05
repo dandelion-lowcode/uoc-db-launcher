@@ -63,10 +63,16 @@ class RiakHttpClientTest {
     }
 
     @Test
-    void onlyRiakUsesStandardInput() {
+    void clientsThatNeedVerbatimScriptsUseStandardInput() {
         for (Database database : Database.values()) {
             // Jupyter has no client at all: it is opened in a browser.
-            if (database == Database.RIAK || !database.hasQueryConsole()) {
+            if (database == Database.RIAK || database == Database.ARANGODB
+                    || database == Database.ELASTICSEARCH || !database.hasQueryConsole()) {
+                if (database == Database.RIAK || database == Database.ARANGODB
+                        || database == Database.ELASTICSEARCH) {
+                    assertTrue(DatabaseClient.of(database).stdin("query").endsWith("\n"));
+                    assertFalse(DatabaseClient.of(database).usesTerminal());
+                }
                 continue;
             }
             DatabaseClient other = DatabaseClient.of(database);
