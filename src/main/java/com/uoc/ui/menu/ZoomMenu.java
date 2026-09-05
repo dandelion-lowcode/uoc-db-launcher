@@ -20,17 +20,41 @@ import java.awt.Window;
 import java.awt.event.KeyEvent;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.prefs.Preferences;
 
 public class ZoomMenu {
+
+    private static final String ZOOM_PREF_KEY = "zoom";
+    private static final float NO_ZOOM = 1f;
 
     private ZoomMenu() {
     }
 
     /**
+     * The zoom last chosen on this machine, or none.
+     *
+     * <p>
+     * A factor the application no longer offers is ignored rather than forced: the list
+     * of steps could be shortened in a later version, and a setting left over from an
+     * older one should not leave the interface at a size the menu cannot show as ticked.
+     */
+    private static float savedZoom(Preferences prefs) {
+        float saved = prefs.getFloat(ZOOM_PREF_KEY, NO_ZOOM);
+        for (float supported : UIScale.getSupportedZoomFactors()) {
+            if (supported == saved) {
+                return saved;
+            }
+        }
+        return NO_ZOOM;
+    }
+
+    /**
+     * @param prefs         where the chosen zoom is remembered between sessions
      * @param onZoomChanged run after every zoom change, for the parts of the interface
      *                      that set their own fonts and would otherwise stay the same size
      */
-    public static JMenu build(Window window, Translations translations, Runnable onZoomChanged) {
+    public static JMenu build(Window window, Preferences prefs, Translations translations,
+            Runnable onZoomChanged) {
         JMenu menu = new JMenu();
 
         JMenuItem resetItem = new JMenuItem();
@@ -64,6 +88,11 @@ public class ZoomMenu {
         menu.add(outItem);
 
         UIScale.setSupportedZoomFactors(new float[] { 0.7f, 0.8f, 0.9f, 1f, 1.1f, 1.2f, 1.3f, 1.4f, 1.5f, 1.75f, 2f });
+
+        // Restored before the items are built, so the one that is ticked is the one in
+        // use. A student who needs the interface larger needs it larger every time, not
+        // once per session.
+        UIScale.setZoomFactor(savedZoom(prefs));
         float currentZoomFactor = UIScale.getZoomFactor();
 
         ButtonGroup group = new ButtonGroup();
@@ -90,6 +119,9 @@ public class ZoomMenu {
                     item.setSelected(true);
                 }
                 adjustWindowBounds(window, (float) e.getOldValue(), (float) e.getNewValue());
+                // Saved here rather than beside each of the four ways to change the zoom,
+                // so a fifth could not be added that forgets to.
+                prefs.putFloat(ZOOM_PREF_KEY, UIScale.getZoomFactor());
                 onZoomChanged.run();
             }
         });

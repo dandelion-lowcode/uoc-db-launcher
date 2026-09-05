@@ -20,7 +20,6 @@ import javax.swing.text.JTextComponent;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.event.ActionEvent;
-import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.util.List;
 import java.util.Locale;
@@ -45,6 +44,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @DisplayName("the query console")
 class DatabaseTabTest {
+
+    @org.junit.jupiter.api.BeforeAll
+    static void installTheThemeThatHoldsOurColours() {
+        ThemeForTests.install();
+    }
 
     private final List<String> commandsRun = new CopyOnWriteArrayList<>();
     private String reply = "";
@@ -140,14 +144,24 @@ class DatabaseTabTest {
         });
     }
 
+    /**
+     * The shortcut for sending, whichever key this system uses for its menu shortcuts.
+     * Asked of the toolkit rather than written down, so this reads as Command on a Mac
+     * and as Control everywhere else, exactly as the application does.
+     */
+    private static KeyStroke sendShortcut() {
+        return KeyStroke.getKeyStroke(KeyEvent.VK_ENTER,
+                java.awt.Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx());
+    }
+
     private void pressCtrlEnter() throws Exception {
         InputMap inputMap = input.getInputMap();
-        Object binding = inputMap.get(
-                KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, InputEvent.CTRL_DOWN_MASK));
-        assertThat(binding).as("Ctrl+Enter is not bound to anything").isNotNull();
+        Object binding = inputMap.get(sendShortcut());
+        assertThat(binding).as("the send shortcut is not bound to anything").isNotNull();
 
         ActionMap actionMap = input.getActionMap();
-        assertThat(actionMap.get(binding)).as("Ctrl+Enter is bound to a missing action").isNotNull();
+        assertThat(actionMap.get(binding))
+                .as("the send shortcut is bound to a missing action").isNotNull();
 
         onSwing(() -> actionMap.get(binding).actionPerformed(
                 new ActionEvent(input, ActionEvent.ACTION_PERFORMED, "send")));
@@ -276,7 +290,9 @@ class DatabaseTabTest {
         onSwing(send::doClick);
 
         assertThat(commandsRun).isEmpty();
-        assertThat(session.getText()).isEmpty();
+        // Nothing was echoed either: a sent query is written into the trace behind a
+        // "> ", and whitespace never gets that far.
+        assertThat(session.getText()).doesNotContain("> ");
     }
 
     @Test
@@ -294,16 +310,43 @@ class DatabaseTabTest {
     }
 
     @Test
-    void clearingEmptiesTheConsole() throws Exception {
+    void clearingTakesTheSessionAwayAndPutsTheExampleBack() throws Exception {
         reply = "algo que borrar";
         type("show dbs");
         onSwing(send::doClick);
         awaitReply();
-        assertThat(session.getText()).isNotEmpty();
+        assertThat(session.getText()).contains("algo que borrar");
 
         onSwing(clear::doClick);
 
-        assertThat(session.getText()).isEmpty();
+        // An empty box says nothing about what to type into it, so clearing leaves the
+        // console the way it opened rather than blank.
+        assertThat(session.getText()).doesNotContain("algo que borrar");
+        assertThat(session.getText()).contains("getDBNames");
+    }
+
+    @Test
+    void theConsoleOpensShowingAQueryForThisDatabaseAndTheAnswerItGives() {
+        // Six databases, six query languages. An empty box says nothing about which one
+        // this tab expects; a worked example says it in two lines.
+        assertThat(session.getText())
+                .contains("getDBNames")
+                .contains("admin")
+                .contains("config");
+    }
+
+    @Test
+    void theFirstRealAnswerReplacesTheExampleRatherThanFollowingIt() throws Exception {
+        reply = "la respuesta de verdad";
+
+        type("show dbs");
+        onSwing(send::doClick);
+        awaitReply();
+
+        assertThat(session.getText()).contains("la respuesta de verdad");
+        assertThat(session.getText())
+                .as("the example's answer must not still be sitting above it")
+                .doesNotContain("'admin'");
     }
 
     @Test

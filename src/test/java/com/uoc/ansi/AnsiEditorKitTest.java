@@ -1,19 +1,22 @@
 package com.uoc.ansi;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
-import org.junit.jupiter.params.provider.ValueSource;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import java.awt.Color;
+import java.util.stream.Stream;
 
 import javax.swing.text.AttributeSet;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.DefaultStyledDocument;
 import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
-import java.awt.Color;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /**
  * The console renderer, exercised against a plain document rather than a
@@ -31,7 +34,7 @@ class AnsiEditorKitTest {
 
     private static final String ESC = String.valueOf((char) 27);
 
-    private final IAnsiColors colors = new LightThemeAnsiColors();
+    private final IAnsiColors colors = Palettes.light();
     private final AnsiEditorKit kit = new AnsiEditorKit(colors);
     private final StyledDocument document = new DefaultStyledDocument();
 
@@ -62,15 +65,15 @@ class AnsiEditorKitTest {
     void aColourAppliesToTheTextThatFollowsIt() throws BadLocationException {
         kit.insertAnsi(document, ESC + "[31mrojo");
 
-        assertThat(StyleConstants.getForeground(attributesAt(0))).isEqualTo(colors.red());
+        assertThat(StyleConstants.getForeground(attributesAt(0))).isEqualTo(colors.of(AnsiColor.RED));
     }
 
     @Test
     void aResetPutsTheColourBack() throws BadLocationException {
         kit.insertAnsi(document, ESC + "[31mrojo" + ESC + "[0mnormal");
 
-        assertThat(StyleConstants.getForeground(attributesAt(0))).isEqualTo(colors.red());
-        assertThat(StyleConstants.getForeground(attributesAt(4))).isNotEqualTo(colors.red());
+        assertThat(StyleConstants.getForeground(attributesAt(0))).isEqualTo(colors.of(AnsiColor.RED));
+        assertThat(StyleConstants.getForeground(attributesAt(4))).isNotEqualTo(colors.of(AnsiColor.RED));
     }
 
     @Test
@@ -84,58 +87,63 @@ class AnsiEditorKitTest {
                 .isFalse();
     }
 
-    @ParameterizedTest(name = "in the {2} theme, code {0} paints {1}")
-    @CsvSource({
-            "30, black, light", "31, red, light", "32, green, light", "33, yellow, light",
-            "34, blue, light", "35, magenta, light", "36, cyan, light", "37, white, light",
-            "90, brightBlack, light", "91, brightRed, light", "92, brightGreen, light",
-            "93, brightYellow, light", "94, brightBlue, light", "95, brightMagenta, light",
-            "96, brightCyan, light", "97, brightWhite, light",
-            "30, black, dark", "31, red, dark", "32, green, dark", "33, yellow, dark",
-            "34, blue, dark", "35, magenta, dark", "36, cyan, dark", "37, white, dark",
-            "90, brightBlack, dark", "91, brightRed, dark", "92, brightGreen, dark",
-            "93, brightYellow, dark", "94, brightBlue, dark", "95, brightMagenta, dark",
-            "96, brightCyan, dark", "97, brightWhite, dark"
-    })
-    void everyColourCodePaintsTheColourItNames(String code, String colourName, String theme)
+    /**
+     * Every code that paints the text, in both themes.
+     *
+     * <p>
+     * Taken from the codes themselves rather than from a list written here. A list
+     * has to
+     * be added to whenever a colour is, and the one it replaced covered exactly the
+     * thirty-two rows somebody had thought to type; this covers every code there
+     * is.
+     */
+    static Stream<Arguments> everyColourCodeInBothThemes() {
+        return java.util.Arrays.stream(AnsiEscCode.values())
+                .filter(code -> code.colour() != null && !code.isBackground())
+                .flatMap(code -> Stream.of(Arguments.of(code, false), Arguments.of(code, true)));
+    }
+
+    @ParameterizedTest(name = "{0} in the {1} theme")
+    @MethodSource("everyColourCodeInBothThemes")
+    void everyColourCodePaintsTheColourItNames(AnsiEscCode code, boolean dark)
             throws BadLocationException {
-        // Both palettes, because a colour that happens to match the default in one theme
+        // Both palettes, because a colour that happens to match the default in one
+        // theme
         // would hide a code that painted nothing at all.
-        IAnsiColors palette = theme.equals("dark")
-                ? new DarkThemeAnsiColors() : new LightThemeAnsiColors();
+        IAnsiColors palette = dark ? Palettes.dark() : Palettes.light();
         AnsiEditorKit themed = new AnsiEditorKit(palette);
         StyledDocument doc = new DefaultStyledDocument();
 
-        themed.insertAnsi(doc, ESC + "[" + code + "mtexto");
+        themed.insertAnsi(doc, code.escCode + "texto");
 
         AttributeSet attributes = doc.getCharacterElement(0).getAttributes();
         assertThat(attributes.isDefined(StyleConstants.Foreground))
-                .as("code %s painted no colour at all", code)
+                .as("%s painted no colour at all", code)
                 .isTrue();
         assertThat(StyleConstants.getForeground(attributes))
-                .isEqualTo(colourOf(palette, colourName));
+                .isEqualTo(palette.of(code.colour()));
     }
 
-    private Color colourOf(IAnsiColors colors, String name) {
-        return switch (name) {
-            case "black" -> colors.black();
-            case "red" -> colors.red();
-            case "green" -> colors.green();
-            case "yellow" -> colors.yellow();
-            case "blue" -> colors.blue();
-            case "magenta" -> colors.magenta();
-            case "cyan" -> colors.cyan();
-            case "white" -> colors.white();
-            case "brightBlack" -> colors.brightBlack();
-            case "brightRed" -> colors.brightRed();
-            case "brightGreen" -> colors.brightGreen();
-            case "brightYellow" -> colors.brightYellow();
-            case "brightBlue" -> colors.brightBlue();
-            case "brightMagenta" -> colors.brightMagenta();
-            case "brightCyan" -> colors.brightCyan();
-            case "brightWhite" -> colors.brightWhite();
-            default -> throw new IllegalArgumentException(name);
-        };
+    @ParameterizedTest(name = "{0} in the {1} theme")
+    @MethodSource("everyColourCodeInBothThemes")
+    void theBackgroundTwinOfEveryColourCodePaintsBehindTheTextInstead(AnsiEscCode code,
+            boolean dark) throws BadLocationException {
+        // The background codes used to have a case each of their own, so nothing
+        // checked
+        // that the two halves agreed. Now one rule covers both and this says so.
+        AnsiEscCode behind = AnsiEscCode.valueOf(code.name() + "_BACKGROUND");
+        IAnsiColors palette = dark ? Palettes.dark() : Palettes.light();
+        AnsiEditorKit themed = new AnsiEditorKit(palette);
+        StyledDocument doc = new DefaultStyledDocument();
+
+        themed.insertAnsi(doc, behind.escCode + "texto");
+
+        AttributeSet attributes = doc.getCharacterElement(0).getAttributes();
+        assertThat(StyleConstants.getBackground(attributes))
+                .isEqualTo(palette.of(code.colour()));
+        assertThat(attributes.isDefined(StyleConstants.Foreground))
+                .as("%s must not touch the text colour", behind)
+                .isFalse();
     }
 
     @Test
@@ -183,7 +191,7 @@ class AnsiEditorKitTest {
         // in one code. Dropping it would leave the table headers plain.
         kit.insertAnsi(document, ESC + "[0;1;35mcabecera" + ESC + "[0m");
 
-        assertThat(StyleConstants.getForeground(attributesAt(0))).isEqualTo(colors.magenta());
+        assertThat(StyleConstants.getForeground(attributesAt(0))).isEqualTo(colors.of(AnsiColor.MAGENTA));
         assertThat(StyleConstants.isBold(attributesAt(0))).isTrue();
     }
 
@@ -192,14 +200,14 @@ class AnsiEditorKitTest {
         // The values in a cqlsh table come as 0;1;33.
         kit.insertAnsi(document, ESC + "[0;1;33m5.0.9" + ESC + "[0m");
 
-        assertThat(StyleConstants.getForeground(attributesAt(0))).isEqualTo(colors.yellow());
+        assertThat(StyleConstants.getForeground(attributesAt(0))).isEqualTo(colors.of(AnsiColor.YELLOW));
     }
 
     @Test
     void anErrorFromCassandraIsPaintedRed() throws BadLocationException {
         kit.insertAnsi(document, ESC + "[0;1;31mInvalidRequest" + ESC + "[0m");
 
-        assertThat(StyleConstants.getForeground(attributesAt(0))).isEqualTo(colors.red());
+        assertThat(StyleConstants.getForeground(attributesAt(0))).isEqualTo(colors.of(AnsiColor.RED));
         assertThat(StyleConstants.isBold(attributesAt(0))).isTrue();
     }
 
@@ -208,14 +216,14 @@ class AnsiEditorKitTest {
         // cypher-shell uses the bright red code rather than the plain one.
         kit.insertAnsi(document, ESC + "[91msyntax error");
 
-        assertThat(StyleConstants.getForeground(attributesAt(0))).isEqualTo(colors.brightRed());
+        assertThat(StyleConstants.getForeground(attributesAt(0))).isEqualTo(colors.of(AnsiColor.BRIGHT_RED));
     }
 
     @Test
     void aNumberFromMongoIsPaintedYellow() throws BadLocationException {
         kit.insertAnsi(document, ESC + "[33m1" + ESC + "[39m");
 
-        assertThat(StyleConstants.getForeground(attributesAt(0))).isEqualTo(colors.yellow());
+        assertThat(StyleConstants.getForeground(attributesAt(0))).isEqualTo(colors.of(AnsiColor.YELLOW));
     }
 
     @Test
@@ -259,7 +267,7 @@ class AnsiEditorKitTest {
     void aBackgroundCodePaintsABackground() throws BadLocationException {
         kit.insertAnsi(document, ESC + "[41mfondo");
 
-        assertThat(StyleConstants.getBackground(attributesAt(0))).isEqualTo(colors.red());
+        assertThat(StyleConstants.getBackground(attributesAt(0))).isEqualTo(colors.of(AnsiColor.RED));
     }
 
     @ParameterizedTest(name = "code {0} keeps the text")
@@ -303,8 +311,8 @@ class AnsiEditorKitTest {
         int afterFirst = document.getLength();
         kit.insertAnsi(document, ESC + "[32mverde" + ESC + "[0m");
 
-        assertThat(StyleConstants.getForeground(attributesAt(0))).isEqualTo(colors.red());
-        assertThat(StyleConstants.getForeground(attributesAt(afterFirst))).isEqualTo(colors.green());
+        assertThat(StyleConstants.getForeground(attributesAt(0))).isEqualTo(colors.of(AnsiColor.RED));
+        assertThat(StyleConstants.getForeground(attributesAt(afterFirst))).isEqualTo(colors.of(AnsiColor.GREEN));
     }
 
     @Test
@@ -320,12 +328,12 @@ class AnsiEditorKitTest {
         kit.insertAnsi(document, ESC + "[31mclaro" + ESC + "[0m");
         int afterFirst = document.getLength();
 
-        IAnsiColors dark = new DarkThemeAnsiColors();
+        IAnsiColors dark = Palettes.dark();
         kit.setAnsiColors(dark);
         kit.insertAnsi(document, ESC + "[31moscuro" + ESC + "[0m");
 
         assertThat(kit.getAnsiColors()).isSameAs(dark);
-        assertThat(StyleConstants.getForeground(attributesAt(afterFirst))).isEqualTo(dark.red());
+        assertThat(StyleConstants.getForeground(attributesAt(afterFirst))).isEqualTo(dark.of(AnsiColor.RED));
     }
 
     @Test
@@ -358,7 +366,53 @@ class AnsiEditorKitTest {
         kit.insertAnsi(document, "antes" + ESC + "[31mdespues");
 
         Color plain = StyleConstants.getForeground(attributesAt(0));
-        assertThat(plain).isNotEqualTo(colors.red());
-        assertThat(StyleConstants.getForeground(attributesAt(6))).isEqualTo(colors.red());
+        assertThat(plain).isNotEqualTo(colors.of(AnsiColor.RED));
+        assertThat(StyleConstants.getForeground(attributesAt(6))).isEqualTo(colors.of(AnsiColor.RED));
+    }
+    @Test
+    void clearingTheScreenEmptiesTheConsoleRatherThanPrintingTheInstruction()
+            throws BadLocationException {
+        // What mongosh sends for "cls": put the cursor at the top, then wipe what is
+        // below. Neither is a colour, so both used to be left in the document and read as
+        // "[1;1H[0J" while nothing was cleared.
+        kit.insertAnsi(document, "algo que estaba antes\n");
+
+        kit.insertAnsi(document, ESC + "[1;1H" + ESC + "[0J");
+
+        assertThat(text()).isEmpty();
+    }
+
+    @Test
+    void whatFollowsAClearIsAllThatIsLeft() throws BadLocationException {
+        kit.insertAnsi(document, "viejo\n" + ESC + "[2J" + "nuevo");
+
+        assertThat(text()).isEqualTo("nuevo");
+    }
+
+    @Test
+    void movingTheCursorIsSwallowedRatherThanPrinted() throws BadLocationException {
+        // There is no cursor to move here. Printing the instruction is the one thing that
+        // must not happen.
+        kit.insertAnsi(document, "antes" + ESC + "[1;1H" + "despues");
+
+        assertThat(text()).isEqualTo("antesdespues");
+    }
+
+    @ParameterizedTest(name = "ESC[{0}")
+    @ValueSource(strings = { "2A", "1B", "10C", "3D", "s", "u", "6n", "?25l", "?25h", "1K" })
+    void everyOtherControlSequenceDisappearsWithoutTakingTextWithIt(String sequence)
+            throws BadLocationException {
+        kit.insertAnsi(document, "antes" + ESC + "[" + sequence + "despues");
+
+        assertThat(text()).isEqualTo("antesdespues");
+    }
+
+    @Test
+    void aClearDoesNotDisturbTheColourOfWhatComesAfterIt() throws BadLocationException {
+        kit.insertAnsi(document, ESC + "[31m" + ESC + "[2J" + "rojo");
+
+        assertThat(text()).isEqualTo("rojo");
+        assertThat(StyleConstants.getForeground(attributesAt(0)))
+                .isEqualTo(colors.of(AnsiColor.RED));
     }
 }

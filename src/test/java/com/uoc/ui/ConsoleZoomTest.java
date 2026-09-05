@@ -32,6 +32,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("zooming the console")
 class ConsoleZoomTest {
 
+    @org.junit.jupiter.api.BeforeAll
+    static void installTheThemeThatHoldsOurColours() {
+        ThemeForTests.install();
+    }
+
     private DatabaseTab tab;
     private JTextArea input;
     private JTextComponent session;

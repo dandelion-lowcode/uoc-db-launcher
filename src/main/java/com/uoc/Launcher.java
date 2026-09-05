@@ -26,14 +26,13 @@ import com.uoc.docker.ServiceStatus;
 import com.uoc.i18n.Message;
 import com.uoc.i18n.Translations;
 import com.uoc.ui.DatabaseTabs;
-import com.uoc.ui.JupyterTab;
 import com.uoc.ui.ServicesPanel;
 import com.uoc.ui.TutorialManager;
+import com.uoc.ui.menu.ConsoleFontManager;
 import com.uoc.ui.menu.DatabasesMenu;
 import com.uoc.ui.menu.FileMenu;
 import com.uoc.ui.menu.HelpMenu;
 import com.uoc.ui.menu.LanguageMenu;
-import com.uoc.ui.menu.ConsoleFontManager;
 import com.uoc.ui.menu.OptionsMenu;
 import com.uoc.ui.menu.ThemeManager;
 import com.uoc.ui.menu.TutorialMenu;
@@ -62,20 +61,20 @@ public class Launcher {
             DockerAvailability.showMissingDialog(translations);
             System.exit(1);
         }
-        SwingUtilities.invokeLater(() -> createAndShowGui(themeManager, fontManager, translations));
+        SwingUtilities.invokeLater(
+                () -> createAndShowGui(themeManager, fontManager, translations, preferences));
     }
 
     private static void createAndShowGui(ThemeManager themeManager,
-            ConsoleFontManager fontManager, Translations translations) {
+            ConsoleFontManager fontManager, Translations translations, Preferences preferences) {
         JFrame frame = new JFrame();
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setIconImage(new FlatSVGIcon(APP_ICON).getImage());
         translations.register(() -> frame.setTitle(translations.get(Message.APP_TITLE)));
 
         List<Database> databases = List.of(Database.values());
-        DatabaseTabs tabs = new DatabaseTabs(databases, new QueryRunner(), translations);
-        JupyterTab jupyterTab = new JupyterTab(() -> openJupyter(translations), translations);
-        tabs.addUtilityTab("Jupyter", jupyterTab.icon(), jupyterTab.getPanel());
+        DatabaseTabs tabs = new DatabaseTabs(databases, new QueryRunner(), translations,
+                () -> openJupyter(translations), preferences);
 
         DockerManager dockerManager = new DockerManager().start();
         // Starting a service from the panel also brings its console into view, because
@@ -91,8 +90,15 @@ public class Launcher {
         dockerManager.setListener((key, status) -> {
             servicesPanel.updateStatus(key, status);
             tabs.setSendEnabled(key, status == ServiceStatus.HEALTHY);
+            // The console comes back as soon as the download is over, whichever way it
+            // ended. What it printed stays on screen: when it failed, that is the only
+            // account of why.
+            if (status != ServiceStatus.INSTALLING) {
+                tabs.endInstallProgress(key, !status.isFailure());
+            }
         });
         dockerManager.setFailureListener(tabs::showFailure);
+        dockerManager.setProgressListener(tabs::showInstallProgress);
         databases.forEach(database -> dockerManager.refreshStatus(database.key()));
 
         // The console starts in whatever font was chosen last time, if this machine
@@ -100,7 +106,7 @@ public class Launcher {
         tabs.applyFont(fontManager.selectedFont());
 
         frame.setJMenuBar(buildMenuBar(frame, themeManager, fontManager, translations, tabs,
-                dockerManager, servicesPanel, jupyterTab, tutorialManager));
+                dockerManager, servicesPanel, tutorialManager, preferences));
         frame.setContentPane(buildContentPane(tabs.getComponent(), servicesPanel));
         frame.setSize(WINDOW_WIDTH, WINDOW_HEIGHT);
         frame.setLocationRelativeTo(null);
@@ -110,18 +116,24 @@ public class Launcher {
     private static JMenuBar buildMenuBar(JFrame frame, ThemeManager themeManager,
             ConsoleFontManager fontManager, Translations translations,
             DatabaseTabs tabs, DockerManager dockerManager, ServicesPanel servicesPanel,
-            JupyterTab jupyterTab, TutorialManager tutorialManager) {
+            TutorialManager tutorialManager, Preferences preferences) {
         JMenuBar menuBar = new JMenuBar();
         menuBar.add(FileMenu.build(translations));
         var servicesMenu = DatabasesMenu.build(tabs, dockerManager::start, dockerManager::stop, translations);
         menuBar.add(servicesMenu);
-        menuBar.add(ZoomMenu.build(frame, translations, tabs::applyZoom));
+        menuBar.add(ZoomMenu.build(frame, preferences, translations, tabs::applyZoom));
+        // The indicators take their colours from the theme's palette, so the panel has
+        // to
+        // be repainted alongside the consoles when the theme changes.
         menuBar.add(OptionsMenu.build(translations, themeManager, fontManager,
-                tabs::applyThemeColors, tabs::applyFont));
+                () -> {
+                    tabs.applyThemeColors();
+                    servicesPanel.applyThemeColors();
+                }, tabs::applyFont));
         menuBar.add(LanguageMenu.build(translations));
         menuBar.add(TutorialMenu.build(() -> tutorialManager.show(
-                servicesPanel.getComponent(), servicesPanel.startButtonFor(Database.MONGO.key()),
-                servicesMenu, jupyterTab.getOpenButton()), translations));
+                servicesPanel.getComponent(), servicesPanel.actionButtonFor(Database.MONGO.key()),
+                servicesMenu, tabs.notebooksButton()), translations));
         menuBar.add(HelpMenu.build(frame, translations));
         return menuBar;
     }

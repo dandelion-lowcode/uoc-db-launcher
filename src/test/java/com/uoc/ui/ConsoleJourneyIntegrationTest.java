@@ -1,8 +1,6 @@
 package com.uoc.ui;
 
-import com.uoc.ansi.DarkThemeAnsiColors;
 import com.uoc.ansi.IAnsiColors;
-import com.uoc.ansi.LightThemeAnsiColors;
 import com.uoc.docker.Database;
 import com.uoc.docker.DockerAvailability;
 import com.uoc.docker.DockerManager;
@@ -10,7 +8,6 @@ import com.uoc.docker.QueryRunner;
 import com.uoc.docker.ServiceStatus;
 import com.uoc.i18n.Translations;
 
-import com.formdev.flatlaf.FlatLaf;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -114,6 +111,30 @@ class ConsoleJourneyIntegrationTest {
                     new Question("curl -i -XPUT http://localhost:8098/riak/diario/uno -d hola", "204"),
                     new Question("http://localhost:8098/riak/diario/uno", "hola"),
                     new Question("http://localhost:8098/riak/diario/no-existe", "404"));
+                case COCKROACHDB -> List.of(
+                    new Question("SELECT 1;", "1"),
+                    new Question("SELECT 'hola';", "hola"),
+                    new Question("SHOW DATABASES;", "defaultdb"),
+                    new Question("SELECT 2 + 3;", "5"));
+                // Nothing is asked of a collection: ArangoDB starts empty and the
+                // course's notebook is what fills it. The last of these used to ask for
+                // the length of "posts", which is a collection that notebook creates, so
+                // it could only ever have failed.
+                case ARANGODB -> List.of(
+                    new Question("RETURN 1", "1"),
+                    new Question("RETURN 'hola'", "hola"),
+                    new Question("RETURN 2 + 3", "5"),
+                    new Question("FOR n IN 1..3 RETURN n * n", "[1,4,9]"));
+                case VERTICA -> List.of(
+                    new Question("SELECT 1;", "1"),
+                    new Question("SELECT 'hola';", "hola"),
+                    new Question("SELECT CURRENT_DATABASE();", "VMart"),
+                    new Question("SELECT 2 + 3;", "5"));
+                case ELASTICSEARCH -> List.of(
+                    new Question("GET /", "200"),
+                    new Question("GET /_cluster/health", "200"),
+                    new Question("GET /_cat/indices", "200"),
+                    new Question("GET /_nodes", "200"));
             // Filtered out before this is reached: Jupyter has no console to ask.
             case JUPYTER -> throw new IllegalArgumentException(
                     database.displayName() + " is not asked questions");
@@ -129,6 +150,10 @@ class ConsoleJourneyIntegrationTest {
             case NEO4J_TWITTER -> new Question("ESTO NO ES CYPHER", "Invalid input");
             case REDIS -> new Question("COMANDO-INVENTADO", "unknown command");
             case RIAK -> new Question("http://localhost:9/no-hay-nadie", "curl:");
+            case COCKROACHDB -> new Question("SELECT * FROM tabla_que_no_existe;", "does not exist");
+            case ARANGODB -> new Question("RETURN ESTO NO ES AQL", "AQL: syntax error");
+            case VERTICA -> new Question("SELECT * FROM tabla_que_no_existe;", "does not exist");
+            case ELASTICSEARCH -> new Question("GET /_index_que_no_existe", "404");
             // Filtered out before this is reached: Jupyter has no console to ask.
             case JUPYTER -> throw new IllegalArgumentException(
                     database.displayName() + " is not asked questions");
@@ -268,11 +293,17 @@ class ConsoleJourneyIntegrationTest {
 
     /** Red or yellow in the current palette, which is how a problem is marked. */
     private static boolean looksLikeAWarning(Color colour) {
-        IAnsiColors palette = FlatLaf.isLafDark()
-                ? new DarkThemeAnsiColors()
-                : new LightThemeAnsiColors();
-        return colour.equals(palette.red()) || colour.equals(palette.brightRed())
-                || colour.equals(palette.yellow()) || colour.equals(palette.brightYellow());
+        // Whatever theme is installed, read from the look and feel exactly as the console
+        // itself reads it.
+        IAnsiColors palette = new com.uoc.ansi.ThemeAnsiColors();
+        for (com.uoc.ansi.AnsiColor warning : new com.uoc.ansi.AnsiColor[] {
+                com.uoc.ansi.AnsiColor.RED, com.uoc.ansi.AnsiColor.BRIGHT_RED,
+                com.uoc.ansi.AnsiColor.YELLOW, com.uoc.ansi.AnsiColor.BRIGHT_YELLOW }) {
+            if (colour.equals(palette.of(warning))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Every colour actually painted in the console. */

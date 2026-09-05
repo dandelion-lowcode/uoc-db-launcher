@@ -1,18 +1,20 @@
 package com.uoc.ui;
 
-import com.uoc.docker.Database;
-import com.uoc.docker.QueryRunner;
-import com.uoc.i18n.Translations;
-
-import com.formdev.flatlaf.extras.FlatSVGIcon;
-
-import javax.swing.JPanel;
-import javax.swing.JTabbedPane;
 import java.awt.Component;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+
+import javax.swing.JButton;
+import javax.swing.JPanel;
+import javax.swing.JTabbedPane;
+import javax.swing.SwingUtilities;
+
+import com.formdev.flatlaf.extras.FlatSVGIcon;
+import com.uoc.docker.Database;
+import com.uoc.docker.QueryRunner;
+import com.uoc.i18n.Translations;
 
 /**
  * The tabbed pane and the console inside each tab, kept together because
@@ -31,10 +33,14 @@ public class DatabaseTabs {
         void onVisibilityChanged(Database database, boolean shown);
     }
 
-    private static final int TAB_ICON_SIZE = 32;
+    /** The longer side of a tab's icon. The label beside it is what names the service. */
+    private static final int TAB_ICON_SIZE = 28;
+    private static final String SHOWN_PREF_KEY = "shownServices";
 
     private final List<Database> databases;
-    // Every service has a panel; only a database has a console behind it. Keeping the two
+    private final java.util.prefs.Preferences preferences;
+    // Every service has a panel; only a database has a console behind it. Keeping
+    // the two
     // apart is what lets Jupyter sit among the tabs without every console operation
     // having to ask whether this one can be typed at.
     private final Map<Database, JPanel> panels = new LinkedHashMap<>();
@@ -43,8 +49,44 @@ public class DatabaseTabs {
     private final JTabbedPane tabbedPane = new JTabbedPane();
     private final List<VisibilityListener> visibilityListeners = new ArrayList<>();
 
-    public DatabaseTabs(List<Database> databases, QueryRunner queryRunner, Translations translations) {
+    // There is one of these, and it lives here with every other tab. It used to be
+    // built
+    // a second time and added separately, which left two Jupyter tabs: the menu
+    // showed
+    // and hid one of them while the other, always present, was the one on screen.
+    private JupyterTab notebooks;
+
+    /**
+     * @param onOpenNotebooks what the notebook tab's button does. It is passed in
+     *                        rather
+     *                        than decided here because opening the notebooks means
+     *                        more
+     *                        than opening a browser: the language they are shown in
+     *                        is
+     *                        put in step with the launcher's first.
+     */
+    public DatabaseTabs(List<Database> databases, QueryRunner queryRunner,
+            Translations translations, Runnable onOpenNotebooks) {
+        this(databases, queryRunner, translations, onOpenNotebooks, null);
+    }
+
+    /**
+     * @param preferences where the open services are remembered between sessions,
+     *                    or
+     *                    {@code null} to remember nothing, which is what the tests
+     *                    want
+     */
+    public DatabaseTabs(List<Database> databases, QueryRunner queryRunner,
+            Translations translations, Runnable onOpenNotebooks,
+            java.util.prefs.Preferences preferences) {
         this.databases = databases;
+        this.preferences = preferences;
+
+        // Which tabs to open: the ones left open last time, or the course's own three
+        // the
+        // first time the application is run on this machine.
+        java.util.Set<Database> toShow = remembered();
+
         for (Database database : databases) {
             if (database.hasQueryConsole()) {
                 DatabaseTab tab = new DatabaseTab(database, queryRunner);
@@ -52,10 +94,11 @@ public class DatabaseTabs {
                 tabs.put(database, tab);
                 panels.put(database, tab.getPanel());
             } else {
-                panels.put(database, new JupyterTab(Browser::openJupyter, translations).getPanel());
+                notebooks = new JupyterTab(onOpenNotebooks, translations);
+                panels.put(database, notebooks.getPanel());
             }
-            icons.put(database, new FlatSVGIcon(database.iconResource(), TAB_ICON_SIZE, TAB_ICON_SIZE));
-            if (database.isShownByDefault()) {
+            icons.put(database, tabIcon(database));
+            if (toShow.contains(database)) {
                 show(database);
             }
         }
@@ -71,12 +114,38 @@ public class DatabaseTabs {
         });
     }
 
+    /**
+     * A service's icon at tab size, with the shape it was drawn in.
+     *
+     * <p>
+     * Asking FlatSVGIcon for a square icon does not fit the drawing into a square: it
+     * scales width and height separately, so anything that is not square arrives
+     * stretched. Vertica's logo is five times as wide as it is tall and was reaching the
+     * tab as a blot. Here the longer side is what gets the tab size, and the shorter one
+     * follows from the drawing's own proportions.
+     */
+    static FlatSVGIcon tabIcon(Database database) {
+        FlatSVGIcon drawn = new FlatSVGIcon(database.iconResource());
+        double aspect = (double) drawn.getIconWidth() / drawn.getIconHeight();
+
+        int width = aspect >= 1 ? TAB_ICON_SIZE : scaled(TAB_ICON_SIZE * aspect);
+        int height = aspect >= 1 ? scaled(TAB_ICON_SIZE / aspect) : TAB_ICON_SIZE;
+
+        return new FlatSVGIcon(database.iconResource(), width, height);
+    }
+
+    /** Never rounded away to nothing: a very long, very thin drawing is still drawn. */
+    private static int scaled(double side) {
+        return Math.max(1, (int) Math.round(side));
+    }
+
     public JTabbedPane getComponent() {
         return tabbedPane;
     }
 
-    public void addUtilityTab(String title, FlatSVGIcon icon, Component component) {
-        tabbedPane.addTab(title, icon, component);
+    /** The button that opens the notebooks, which the tutorial points at. */
+    public JButton notebooksButton() {
+        return notebooks.getOpenButton();
     }
 
     public List<Database> databases() {
@@ -84,7 +153,8 @@ public class DatabaseTabs {
     }
 
     /**
-     * The console behind a tab, or {@code null} for a service that has none. Prefer the
+     * The console behind a tab, or {@code null} for a service that has none. Prefer
+     * the
      * two methods below, which already know what to do when there is no console.
      */
     public DatabaseTab tabFor(String key) {
@@ -92,10 +162,12 @@ public class DatabaseTabs {
     }
 
     /**
-     * Opens or closes the console for typing, following whether the service is ready.
+     * Opens or closes the console for typing, following whether the service is
+     * ready.
      *
      * <p>
-     * A service with no console is left alone rather than guarded against at every call
+     * A service with no console is left alone rather than guarded against at every
+     * call
      * site, which is how the first version of this went wrong.
      */
     public void setSendEnabled(String key, boolean enabled) {
@@ -109,7 +181,8 @@ public class DatabaseTabs {
      * Prints in the console why Docker refused to start a service.
      *
      * <p>
-     * A service with no console has nowhere to print it; the indicator beside the tabs
+     * A service with no console has nowhere to print it; the indicator beside the
+     * tabs
      * still turns to show something went wrong.
      */
     public void showFailure(String key, String details) {
@@ -119,8 +192,46 @@ public class DatabaseTabs {
         }
     }
 
+    /**
+     * Shows how an install is going in the trace, rewriting it as the news arrives.
+     */
+    public void showInstallProgress(String key, String text) {
+        DatabaseTab tab = tabFor(key);
+        if (tab != null) {
+            tab.showInstallProgress(text);
+        }
+    }
+
+    /**
+     * The install is over, so the box for typing queries comes back.
+     *
+     * @param succeeded whether the service came up. When it did, the trace is cleared:
+     *                  what the install printed is finished business. When it did not, it
+     *                  is kept, being the only account of why.
+     */
+    public void endInstallProgress(String key, boolean succeeded) {
+        DatabaseTab tab = tabFor(key);
+        if (tab != null) {
+            tab.endInstallProgress(succeeded);
+        }
+    }
+
     public void applyThemeColors() {
         tabs.values().forEach(DatabaseTab::applyThemeColors);
+
+        // Hiding a tab takes its panel out of the tabbed pane altogether, so it belongs
+        // to no window. What repaints a theme change walks the windows that are
+        // showing,
+        // which means a hidden tab keeps the look of the theme it was last seen under
+        // and
+        // comes back wrong: light panels in a dark window. Each one is refreshed here
+        // by
+        // name, since nothing else will reach it.
+        for (Map.Entry<Database, JPanel> entry : panels.entrySet()) {
+            if (!isShown(entry.getKey())) {
+                SwingUtilities.updateComponentTreeUI(entry.getValue());
+            }
+        }
     }
 
     /**
@@ -182,9 +293,62 @@ public class DatabaseTabs {
     }
 
     private void announce(Database database, boolean shown) {
+        remember();
         for (VisibilityListener listener : visibilityListeners) {
             listener.onVisibilityChanged(database, shown);
         }
+    }
+
+    /**
+     * Writes down which services are open, so the next session starts where this
+     * one left
+     * off.
+     *
+     * <p>
+     * A student working through the Cassandra exercises should not have to tick
+     * Cassandra
+     * again every time they open the launcher, and the containers themselves are
+     * still
+     * running from last time, so the tabs are the only part that had been
+     * forgetting.
+     */
+    private void remember() {
+        if (preferences == null) {
+            return;
+        }
+        preferences.put(SHOWN_PREF_KEY, databases.stream().filter(this::isShown)
+                .map(Database::key).reduce((one, other) -> one + "," + other).orElse(""));
+    }
+
+    /**
+     * Which services were open last time, or the ones the course starts with when
+     * this is
+     * the first run.
+     *
+     * <p>
+     * A name that no longer matches a service is skipped rather than failing: the
+     * list is
+     * a convenience, and a database renamed between versions should not stop the
+     * application from opening.
+     */
+    private java.util.Set<Database> remembered() {
+        String saved = preferences == null ? null : preferences.get(SHOWN_PREF_KEY, null);
+        if (saved == null) {
+            return databases.stream().filter(Database::isShownByDefault)
+                    .collect(java.util.stream.Collectors.toSet());
+        }
+        java.util.Set<Database> shown = new java.util.HashSet<>();
+        for (String key : saved.split(",")) {
+            if (key.isBlank()) {
+                continue;
+            }
+            try {
+                shown.add(Database.fromKey(key.strip()));
+            } catch (IllegalArgumentException ignored) {
+                // A service this version no longer has.
+            }
+        }
+        return shown;
     }
 
     // Keeps a tab that comes back in the declared database order instead of

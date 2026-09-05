@@ -33,7 +33,31 @@ public class AnsiEditorKit extends StyledEditorKit {
     private String fontFamily = "Monospaced";
     private IAnsiColors ansiColors;
 
-    private final Pattern ansiEscCodePattern = Pattern.compile("\u001b\\[[0-9;]*m");
+    /**
+     * Any control sequence, not only the ones that set a colour.
+     *
+     * <p>
+     * It used to match ESC [ ... m alone, so everything else a client sent was left in
+     * the document and read as text. Typing "cls" at mongosh printed "[1;1H[0J", which is
+     * what it sends to put the cursor at the top and wipe what is below: two sequences
+     * shown as gibberish, and nothing cleared.
+     *
+     * <p>
+     * The final letter says what the sequence is for. Two are acted on here; the rest are
+     * swallowed, which is what a console with no cursor to move should do with an
+     * instruction to move one.
+     */
+    private final Pattern ansiEscCodePattern = Pattern.compile("\u001b\\[[0-9;?]*[A-Za-z]");
+
+    /** Sets colours and other styling: the only sequences that change how text looks. */
+    private static final char SELECT_GRAPHIC_RENDITION = 'm';
+
+    /**
+     * Erases part of the display. This console only ever appends, so there is no cursor
+     * to erase from and nothing below one: a client asking for any of it means "clear",
+     * which is what a student typing {@code cls} is asking for.
+     */
+    private static final char ERASE_DISPLAY = 'J';
 
     // The palette is always required. The original library defaulted to one built for a
     // black terminal, which would be unreadable on the light theme and, unlike the two
@@ -169,7 +193,23 @@ public class AnsiEditorKit extends StyledEditorKit {
                 doc.insertString(insertPos, plainText, attributes);
                 insertPos += plainText.length();
             }
-            attributes = applyEscCode(attributes, ansiText.substring(matcher.start(), matcher.end()));
+
+            String sequence = ansiText.substring(matcher.start(), matcher.end());
+            switch (sequence.charAt(sequence.length() - 1)) {
+                case SELECT_GRAPHIC_RENDITION -> attributes = applyEscCode(attributes, sequence);
+                case ERASE_DISPLAY -> {
+                    // Everything written so far goes, including what this same batch has
+                    // just added: a client that asks to clear is asking to clear the
+                    // query it is answering too, exactly as a terminal would.
+                    doc.remove(0, insertPos);
+                    insertPos = 0;
+                }
+                // Moving the cursor, asking where it is, changing the scrolling region:
+                // all meaningless here, and all better swallowed than printed.
+                default -> {
+                    // Nothing to do.
+                }
+            }
             textStart = matcher.end();
         }
 
