@@ -322,7 +322,7 @@ class DatabaseTabTest {
         // An empty box says nothing about what to type into it, so clearing leaves the
         // console the way it opened rather than blank.
         assertThat(session.getText()).doesNotContain("algo que borrar");
-        assertThat(session.getText()).contains("getDBNames");
+        assertThat(session.getText()).contains("show databases");
     }
 
     @Test
@@ -330,7 +330,7 @@ class DatabaseTabTest {
         // Six databases, six query languages. An empty box says nothing about which one
         // this tab expects; a worked example says it in two lines.
         assertThat(session.getText())
-                .contains("getDBNames")
+                .contains("show databases")
                 .contains("admin")
                 .contains("config");
     }
