@@ -58,4 +58,44 @@ public interface ProcessRunner {
         result.output().lines().forEach(onLine);
         return result;
     }
+
+    /** A process that is still running, and the only thing left to do with it. */
+    @FunctionalInterface
+    interface LiveProcess {
+
+        /** Ends it. Ending one twice, or one that is already over, does nothing. */
+        void stop();
+    }
+
+    /**
+     * Starts a command that is not expected to end, hands over each line as it is
+     * written, and says so if it stops anyway.
+     *
+     * <p>
+     * Docker's event stream is such a command: it runs for as long as the launcher does,
+     * and the only thing that ends it is the daemon going away, which is news the
+     * launcher has to act on. {@link #run} can say none of that, since it answers once
+     * the process is over and this one is not meant to be.
+     *
+     * <p>
+     * The default runs the command through {@link #run} on a thread of its own and
+     * replays what it wrote, which is enough for the stand-ins the tests use; the real
+     * runner overrides it, and only the real one can end a process that has stopped
+     * listening.
+     *
+     * @param command the program and its arguments; never empty
+     * @param onLine  called with each line, on a thread of the runner's own rather than
+     *                the caller's
+     * @param onEnded called once, whenever the process stops, for whatever reason
+     * @return the handle that ends it; never {@code null}
+     */
+    default LiveProcess stream(List<String> command, Consumer<String> onLine, Runnable onEnded) {
+        Thread thread = new Thread(() -> {
+            run(command, null, onLine);
+            onEnded.run();
+        });
+        thread.setDaemon(true);
+        thread.start();
+        return thread::interrupt;
+    }
 }
