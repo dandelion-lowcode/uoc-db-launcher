@@ -311,6 +311,6 @@ class DatabaseTabsTest {
     void noTabIconIsTallerOrWiderThanTheRowItSitsIn(Database database) {
         FlatSVGIcon shown = DatabaseTabs.tabIcon(database);
 
-        assertThat(Math.max(shown.getIconWidth(), shown.getIconHeight())).isEqualTo(28);
+        assertThat(Math.max(shown.getIconWidth(), shown.getIconHeight())).isEqualTo(24);
     }
 }

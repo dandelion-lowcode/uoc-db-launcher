@@ -44,7 +44,10 @@ public class ThemeManager {
 
     private static final String THEME_PREF_KEY = "theme";
 
-    /** Where our own colour definitions live, one properties file per theme. */
+    /**
+     * Where our own definitions live: FlatLaf.properties for what holds under every
+     * theme, and one file per theme for what does not.
+     */
     private static final String THEME_PACKAGE = "themes";
 
     private final Preferences prefs;

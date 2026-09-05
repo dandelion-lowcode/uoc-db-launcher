@@ -11,6 +11,7 @@ import javax.swing.JPanel;
 import javax.swing.JTabbedPane;
 import javax.swing.SwingUtilities;
 
+import com.formdev.flatlaf.FlatClientProperties;
 import com.formdev.flatlaf.extras.FlatSVGIcon;
 import com.uoc.docker.Database;
 import com.uoc.docker.QueryRunner;
@@ -34,7 +35,7 @@ public class DatabaseTabs {
     }
 
     /** The longer side of a tab's icon. The label beside it is what names the service. */
-    private static final int TAB_ICON_SIZE = 28;
+    private static final int TAB_ICON_SIZE = 24;
     private static final String SHOWN_PREF_KEY = "shownServices";
 
     private final List<Database> databases;
@@ -103,6 +104,8 @@ public class DatabaseTabs {
             }
         }
 
+        layOutTabsInOneRow();
+
         tabbedPane.addChangeListener(e -> {
             Component selected = tabbedPane.getSelectedComponent();
             for (DatabaseTab tab : tabs.values()) {
@@ -112,6 +115,31 @@ public class DatabaseTabs {
                 }
             }
         });
+    }
+
+    /**
+     * Eleven tabs in one row, scrolled when they do not fit.
+     *
+     * <p>
+     * Wrapped onto a second row, which is what Swing does by default, the rows swap
+     * places as a tab is picked: the one a student just clicked jumps to the bottom and
+     * everything else moves with it, so the tab they want next is never twice in the same
+     * place.
+     *
+     * <p>
+     * The buttons at both ends, rather than a pair at one end, because that is where a
+     * student looks for what is off the edge on that side. One button per end, and only
+     * while there is something to scroll to. No menu of the hidden tabs: what is hidden
+     * is a scroll away, and the same list is in the Services menu already.
+     */
+    private void layOutTabsInOneRow() {
+        tabbedPane.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
+        tabbedPane.putClientProperty(FlatClientProperties.TABBED_PANE_SCROLL_BUTTONS_POLICY,
+                FlatClientProperties.TABBED_PANE_POLICY_AS_NEEDED_SINGLE);
+        tabbedPane.putClientProperty(FlatClientProperties.TABBED_PANE_SCROLL_BUTTONS_PLACEMENT,
+                FlatClientProperties.TABBED_PANE_PLACEMENT_BOTH);
+        tabbedPane.putClientProperty(FlatClientProperties.TABBED_PANE_TABS_POPUP_POLICY,
+                FlatClientProperties.TABBED_PANE_POLICY_NEVER);
     }
 
     /**
