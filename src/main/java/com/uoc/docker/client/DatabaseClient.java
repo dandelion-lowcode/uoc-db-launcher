@@ -21,11 +21,13 @@ import java.util.List;
  * fixed
  * set of databases the course uses: there is exactly one implementation per
  * constant of
- * {@link Database}, and nothing outside this package may add another.
+ * {@link Database}, and nothing outside this package may add another. The two taught
+ * through a REST API reach it through {@link CurlClient}, which is where everything they
+ * do the same way lives.
  */
 public sealed interface DatabaseClient
-    permits MongoshClient, CqlshClient, CypherShellClient, RedisCliClient, RiakHttpClient,
-    CockroachSqlClient, ArangoshClient, VerticaSqlClient, ElasticsearchHttpClient {
+    permits MongoshClient, CqlshClient, CypherShellClient, RedisCliClient, CurlClient,
+    CockroachSqlClient, ArangoshClient, VerticaSqlClient {
 
     /** The client program and its arguments, appended after the container name. */
     List<String> command(String query);
