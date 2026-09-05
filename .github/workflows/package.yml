@@ -19,7 +19,7 @@ on:
   workflow_dispatch:
 
 env:
-  APP_NAME: UOC DB Launcher
+  APP_NAME: UOCDBLauncher
   MAIN_CLASS: com.uoc.Launcher
   JAVA_VERSION: "25"
 
