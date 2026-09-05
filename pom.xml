@@ -28,32 +28,11 @@
             <artifactId>flatlaf-extras</artifactId>
             <version>3.7.2</version>
         </dependency>
-        <dependency>
-            <groupId>com.github.docker-java</groupId>
-            <artifactId>docker-java-core</artifactId>
-            <version>3.7.1</version>
-            <exclusions>
-                <!--
-                    Eight megabytes of cryptography, a third of everything the application
-                    ships, used only to talk to a Docker daemon over TCP with client
-                    certificates. This one reaches the daemon a student runs on their own
-                    machine, over a named pipe on Windows and a Unix socket elsewhere, and
-                    neither goes near TLS.
-
-                    Should a remote daemon over TLS ever be supported, this exclusion is
-                    what has to come out first.
-                -->
-                <exclusion>
-                    <groupId>org.bouncycastle</groupId>
-                    <artifactId>bcpkix-jdk18on</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
-            <groupId>com.github.docker-java</groupId>
-            <artifactId>docker-java-transport-zerodep</artifactId>
-            <version>3.7.1</version>
-        </dependency>
+        <!--
+            Docker itself is not a dependency: every command goes through the docker
+            executable on the PATH, which a student has anyway, since Docker Desktop is
+            what the launcher exists to drive.
+        -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
@@ -71,11 +50,6 @@
             <artifactId>jqwik</artifactId>
             <version>1.10.1</version>
             <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-jdk14</artifactId>
-            <version>1.7.30</version>
         </dependency>
     </dependencies>
 
