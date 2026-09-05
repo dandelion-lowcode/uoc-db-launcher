@@ -3,6 +3,13 @@
 # against, instead of a MongoDB or a Cassandra that has moved on and answers differently.
 # Every version here is one the launcher has been run against.
 
+# Every port here is published to 127.0.0.1 rather than to every interface, which is what
+# Docker does when the address is left out. These services are meant for the one student
+# on the one machine: most of them have no password at all, and the notebook runs with no
+# token, no XSRF check and any origin allowed, which on a university network is an
+# invitation to run code on their laptop. Nothing is lost by binding to localhost, since
+# the launcher and the browser it opens are both on it.
+
 # Without this, Compose names the project after the directory holding this file, and the
 # network and any volume are named after the project. Moving this file, or renaming the
 # folder a student unzipped, would silently leave their containers behind under the old
@@ -14,7 +21,7 @@ services:
     image: mongo:8.3.8
     container_name: uocdb-mongo
     ports:
-      - "27017:27017"
+      - "127.0.0.1:27017:27017"
     healthcheck:
       test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
       interval: 10s
@@ -26,7 +33,7 @@ services:
     image: cassandra:5.0.9
     container_name: uocdb-cassandra
     ports:
-      - "9042:9042"
+      - "127.0.0.1:9042:9042"
     healthcheck:
       test: ["CMD-SHELL", "cqlsh -e 'describe keyspaces' || exit 1"]
       interval: 10s
@@ -40,8 +47,8 @@ services:
     environment:
       - NEO4J_AUTH=none
     ports:
-      - "7474:7474"
-      - "7687:7687"
+      - "127.0.0.1:7474:7474"
+      - "127.0.0.1:7687:7687"
     healthcheck:
       test: ["CMD-SHELL", "wget -O /dev/null -q http://localhost:7474 || exit 1"]
       interval: 10s
@@ -62,8 +69,8 @@ services:
     environment:
       - NEO4J_AUTH=none
     ports:
-      - "17474:7474"
-      - "17687:7687"
+      - "127.0.0.1:17474:7474"
+      - "127.0.0.1:17687:7687"
     healthcheck:
       # The web interface answers well before the graph can be queried, and the console
       # talks over Bolt, not HTTP. Asking the query engine itself is the only check that
@@ -78,7 +85,7 @@ services:
     image: redis:8.10.1
     container_name: uocdb-redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -102,8 +109,8 @@ services:
         # names its ring after.
         ipv4_address: 172.28.0.10
     ports:
-      - "8087:8087"
-      - "8098:8098"
+      - "127.0.0.1:8087:8087"
+      - "127.0.0.1:8098:8098"
     healthcheck:
       # Stores a key over HTTP, which is the first thing the notes have a student do. A
       # read is not enough: watching a restart, this node answered 404 to everything for
@@ -126,12 +133,12 @@ services:
     container_name: uocdb-cockroachdb
     command: start-single-node --insecure
     ports:
-      - "26257:26257"
+      - "127.0.0.1:26257:26257"
       # The web console, moved off 8080. On a student's own machine that port belongs to
       # whatever they last built, and a service that refuses to start because something
       # else holds a port it does not even need is a bad first impression. Inside the
       # container it stays 8080, which is what the healthcheck below asks.
-      - "18080:8080"
+      - "127.0.0.1:18080:8080"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS 'http://localhost:8080/health?ready=1' > /dev/null"]
       interval: 10s
@@ -162,7 +169,7 @@ services:
       - arangodb_imdb_data:/var/lib/arangodb3
       - arangodb_imdb_apps_data:/var/lib/arangodb3-apps
     ports:
-      - "8529:8529"
+      - "127.0.0.1:8529:8529"
     healthcheck:
       # 127.0.0.1, not localhost. Inside this image localhost resolves to ::1 first and
       # arangod listens only on IPv4, so the check answered "connection refused" for a
@@ -182,8 +189,8 @@ services:
     platform: linux/amd64
     container_name: uocdb-vertica
     ports:
-      - "5433:5433"
-      - "5444:5444"
+      - "127.0.0.1:5433:5433"
+      - "127.0.0.1:5444:5444"
     healthcheck:
       # The full path: vsql is not on the PATH a healthcheck runs with, so as a bare name
       # this failed with "command not found" every time and the service was never once
@@ -207,7 +214,7 @@ services:
       xpack.security.enabled: "false"
       ES_JAVA_OPTS: -Xms512m -Xmx512m
     ports:
-      - "9200:9200"
+      - "127.0.0.1:9200:9200"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health > /dev/null"]
       interval: 10s
@@ -221,7 +228,7 @@ services:
     image: uocdb-jupyter:latest
     container_name: uocdb-jupyter
     ports:
-      - "8888:8888"
+      - "127.0.0.1:8888:8888"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
