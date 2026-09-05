@@ -32,8 +32,13 @@ jobs:
           cache: maven
 
       # The integration group is excluded by the POM, so this is the default run.
+      #
+      # Under a virtual display because these build real windows, menus and tabs. Asked
+      # on a runner with no screen, AWT throws HeadlessException from the very call that
+      # makes the send shortcut Cmd on a Mac and Ctrl everywhere else, and half the user
+      # interface tests fail for want of a screen rather than for anything they check.
       - name: Run the tests that need no containers
-        run: mvn -B test
+        run: xvfb-run -a mvn -B test
 
   integration:
     name: Against real containers
@@ -56,4 +61,4 @@ jobs:
       # The runner has a daemon already; what it does not have is the images, and every
       # one of them is pulled by the tests themselves as each service is started.
       - name: Run every test, containers included
-        run: mvn -B test -Dexcluded.groups=
+        run: xvfb-run -a mvn -B test -Dexcluded.groups=
