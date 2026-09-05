@@ -87,8 +87,13 @@ public class DockerManager {
     private final Path composeFile;
     private final ImageAvailability images;
 
-    /** The services a compose command is running against right now. */
-    private final java.util.Set<String> busy = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    /** What a compose command is doing to a service right now, for each one it is. */
+    private final java.util.Map<String, ServiceAction> running =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** What was asked of a busy service, to be done as soon as it is free. */
+    private final java.util.Map<String, ServiceAction> queued =
+            new java.util.concurrent.ConcurrentHashMap<>();
 
     /** The docker events process, for as long as there is one to end. */
     private volatile ProcessRunner.LiveProcess events;
@@ -153,9 +158,9 @@ public class DockerManager {
         scheduler.shutdownNow();
         executor.shutdownNow();
         try {
-            ProcessRunner.LiveProcess running = events;
-            if (running != null) {
-                running.stop();
+            ProcessRunner.LiveProcess stream = events;
+            if (stream != null) {
+                stream.stop();
             }
         } catch (Exception e) {
             // Nothing useful can be done while shutting down.
@@ -180,61 +185,89 @@ public class DockerManager {
     }
 
     public void start(String key) {
-        // The phase is entered here rather than on the worker, so the button is disabled
-        // the instant it is pressed. Working out whether the image has to be fetched
-        // first runs two Docker commands and takes the better part of a second, and a
-        // button that stays live for that long gets pressed again.
-        if (!claim(key, Phase.STARTING)) {
-            return;
-        }
-        executor.submit(() -> {
-            try {
-                // Asked before starting, because once it is under way there is no telling
-                // from the outside whether the wait is a download or a start, and the two
-                // differ by minutes.
-                Phase waiting = images.mustBeInstalled(key) ? Phase.INSTALLING : Phase.STARTING;
-                runCommand(key, waiting, COMPOSE_UP, COMPOSE_DETACHED);
-            } finally {
-                busy.remove(key);
-            }
-        });
+        request(key, ServiceAction.START);
     }
 
     public void stop(String key) {
-        if (!claim(key, Phase.STOPPING)) {
-            return;
-        }
-        executor.submit(() -> {
-            try {
-                runCommand(key, Phase.STOPPING, COMPOSE_STOP);
-            } finally {
-                busy.remove(key);
-            }
-        });
+        request(key, ServiceAction.STOP);
     }
 
     /**
-     * Takes charge of a service, unless a command is already running against it.
+     * Takes charge of a service, or remembers what was asked for until it can.
      *
      * <p>
      * Two commands at once against the same service is not a race the launcher can win:
      * both fetch the image, both then try to create the container, and the second is
-     * refused by Docker with a name conflict that means nothing to a student.
+     * refused by Docker with a name conflict that means nothing to a student. So one
+     * command runs at a time.
      *
      * <p>
-     * The guard is here rather than on the buttons because it has to cover every way in
-     * -- the panel, the menu, and a second press that lands before the first has been
-     * reported.
+     * What used to happen to the second request was nothing at all, silently, and there
+     * is a window of seconds where that is exactly what a student meets. A service being
+     * stopped is reported stopped the moment its container dies, which is well before
+     * "compose stop" returns; the button is live again at that point, and a press landing
+     * there was dropped, leaving a service that stayed stopped however often it was
+     * asked to start.
      *
-     * @return whether this call is the one that should go ahead
+     * <p>
+     * It is held instead, and run when the command in flight is done. The last request
+     * is the one kept, because a student pressing start and then stop means stop.
+     *
+     * <p>
+     * Asking again for what is already being done is still ignored, and has to be: two
+     * presses of play while an image downloads used to run a second "compose up" beside
+     * the first, and Docker refused it with a name conflict that meant nothing to the
+     * student reading it. Running that second one afterwards instead would be harmless
+     * but pointless.
      */
-    private boolean claim(String key, Phase phase) {
-        if (!busy.add(key)) {
-            return false;
+    private synchronized void request(String key, ServiceAction action) {
+        ServiceAction inFlight = running.get(key);
+        if (inFlight != null) {
+            if (inFlight != action) {
+                queued.put(key, action);
+            }
+            return;
         }
+        begin(key, action);
+    }
+
+    /**
+     * Starts one command running. The phase is entered on the calling thread rather than
+     * on the worker, so the button is disabled the instant it is pressed: working out
+     * whether the image has to be fetched first runs two Docker commands and takes the
+     * better part of a second, and a button that stays live for that long gets pressed
+     * again.
+     */
+    private synchronized void begin(String key, ServiceAction action) {
+        running.put(key, action);
         reporter.retrying(key);
-        reporter.enterPhase(key, phase);
-        return true;
+        reporter.enterPhase(key, action == ServiceAction.START ? Phase.STARTING : Phase.STOPPING);
+
+        executor.submit(() -> {
+            try {
+                if (action == ServiceAction.START) {
+                    // Asked before starting, because once it is under way there is no
+                    // telling from the outside whether the wait is a download or a start,
+                    // and the two differ by minutes.
+                    Phase waiting =
+                            images.mustBeInstalled(key) ? Phase.INSTALLING : Phase.STARTING;
+                    runCommand(key, waiting, COMPOSE_UP, COMPOSE_DETACHED);
+                } else {
+                    runCommand(key, Phase.STOPPING, COMPOSE_STOP);
+                }
+            } finally {
+                finished(key);
+            }
+        });
+    }
+
+    /** Hands the service back, and takes up whatever was asked for while it was busy. */
+    private synchronized void finished(String key) {
+        running.remove(key);
+        ServiceAction next = queued.remove(key);
+        if (next != null && !closed) {
+            begin(key, next);
+        }
     }
 
     /**

@@ -67,6 +67,49 @@ class DockerManagerOfflineTest {
     }
 
     @Test
+    void startingAServiceWhileItIsStoppingIsHeldRatherThanDropped() {
+        // A service is reported stopped the moment its container dies, which is seconds
+        // before "compose stop" returns. The button is live again in that window, and a
+        // press landing there used to be thrown away without a word: the service sat
+        // there stopped, however many times a student asked it to start.
+        List<List<String>> commands = new CopyOnWriteArrayList<>();
+        managerFor((command, stdin) -> {
+            commands.add(command);
+            sleepBriefly();
+            return new ProcessRunner.Result(0, "");
+        });
+
+        manager.stop(Database.MONGO.key());
+        manager.start(Database.MONGO.key());
+
+        awaitQuiet();
+        assertThat(commands.stream().filter(c -> c.contains("stop")).toList()).hasSize(1);
+        assertThat(commands.stream().filter(c -> c.contains("up")).toList())
+                .as("the start asked for while it was stopping never ran")
+                .hasSize(1);
+    }
+
+    @Test
+    void onlyTheLastThingAskedForWhileBusyIsDone() {
+        // Changing their mind twice is one decision, not three commands to work through.
+        List<List<String>> commands = new CopyOnWriteArrayList<>();
+        managerFor((command, stdin) -> {
+            commands.add(command);
+            sleepBriefly();
+            return new ProcessRunner.Result(0, "");
+        });
+
+        manager.start(Database.MONGO.key());
+        manager.stop(Database.MONGO.key());
+        manager.start(Database.MONGO.key());
+        manager.stop(Database.MONGO.key());
+
+        awaitQuiet();
+        assertThat(commands.stream().filter(c -> c.contains("up")).toList()).hasSize(1);
+        assertThat(commands.stream().filter(c -> c.contains("stop")).toList()).hasSize(1);
+    }
+
+    @Test
     void aServiceCanBeStartedAgainOnceTheFirstCommandHasFinished() {
         List<List<String>> commands = new CopyOnWriteArrayList<>();
         managerFor((command, stdin) -> {
