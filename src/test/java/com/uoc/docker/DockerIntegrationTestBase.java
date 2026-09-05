@@ -28,6 +28,9 @@ abstract class DockerIntegrationTestBase {
     private static final Duration STARTUP_LIMIT = Duration.ofMinutes(5);
     private static final Duration POLL = Duration.ofSeconds(2);
 
+    /** What Docker calls a container whose healthcheck passes. */
+    private static final String HEALTHY = "healthy";
+
     private static final ProcessRunner PROCESS = new SystemProcessRunner();
 
     /**
@@ -61,7 +64,7 @@ abstract class DockerIntegrationTestBase {
 
         Instant deadline = Instant.now().plus(STARTUP_LIMIT);
         while (Instant.now().isBefore(deadline)) {
-            if (healthOf(database).equals(ContainerStatus.HEALTHY)) {
+            if (healthOf(database).equals(HEALTHY)) {
                 return;
             }
             sleep();

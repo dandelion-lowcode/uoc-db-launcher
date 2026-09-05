@@ -51,6 +51,79 @@ class DockerManagerOfflineTest {
         return manager;
     }
 
+    @Test
+    void aSecondStartWhileTheFirstIsStillRunningIsIgnored() {
+        // Two compose commands at once against one service both fetch the image and then
+        // both try to create the container, and Docker refuses the second:
+        //   Conflict. The container name "/uocdb-mongo" is already in use
+        // which is what a student saw in the trace box after pressing play twice while
+        // an image was downloading.
+        List<List<String>> commands = new CopyOnWriteArrayList<>();
+        managerFor((command, stdin) -> {
+            commands.add(command);
+            sleepBriefly();
+            return new ProcessRunner.Result(0, "");
+        });
+
+        manager.start(Database.MONGO.key());
+        manager.start(Database.MONGO.key());
+        manager.start(Database.MONGO.key());
+
+        awaitQuiet();
+        assertThat(commands.stream().filter(c -> c.contains("up")).toList()).hasSize(1);
+    }
+
+    @Test
+    void aServiceCanBeStartedAgainOnceTheFirstCommandHasFinished() {
+        List<List<String>> commands = new CopyOnWriteArrayList<>();
+        managerFor((command, stdin) -> {
+            commands.add(command);
+            return new ProcessRunner.Result(0, "");
+        });
+
+        manager.start(Database.MONGO.key());
+        awaitQuiet();
+        manager.start(Database.MONGO.key());
+        awaitQuiet();
+
+        assertThat(commands.stream().filter(c -> c.contains("up")).toList()).hasSize(2);
+    }
+
+    @Test
+    void oneServiceBeingBusyDoesNotBlockAnother() {
+        List<List<String>> commands = new CopyOnWriteArrayList<>();
+        managerFor((command, stdin) -> {
+            commands.add(command);
+            sleepBriefly();
+            return new ProcessRunner.Result(0, "");
+        });
+
+        manager.start(Database.MONGO.key());
+        manager.start(Database.REDIS.key());
+
+        awaitQuiet();
+        assertThat(commands.stream().filter(c -> c.contains("up")).toList()).hasSize(2);
+    }
+
+    private static void sleepBriefly() {
+        try {
+            Thread.sleep(300);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /** Waits long enough for the commands submitted so far to have run. */
+    private static void awaitQuiet() {
+        try {
+            Thread.sleep(1500);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
+        }
+    }
+
     @AfterEach
     void stopListening() {
         if (manager != null) {
@@ -90,13 +163,15 @@ class DockerManagerOfflineTest {
         managerFor((command, stdin) -> new ProcessRunner.Result(0, ""));
         manager.refreshStatus(Database.REDIS.key());
         awaitStatus(ServiceStatus.ERROR);
-        seen.clear();
 
         // Starting the event stream against a daemon that is not there is the same thing
-        // that happens when it disappears while the launcher is open.
+        // that happens when it disappears while the launcher is open. The service is
+        // already shown as failed, and a status that has not changed is not announced a
+        // second time: the panel is already saying the right thing, and repainting it
+        // would restart its animation for nothing.
         manager.start();
 
-        awaitStatus(ServiceStatus.ERROR);
+        assertThat(seen).containsOnly(ServiceStatus.ERROR);
     }
 
     @Test

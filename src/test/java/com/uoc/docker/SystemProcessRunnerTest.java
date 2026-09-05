@@ -17,6 +17,53 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class SystemProcessRunnerTest {
 
+    /** Writes one line, waits, then writes another, so the two cannot arrive together. */
+    private static final String SLOW_EMITTER = """
+            public class SlowEmitter {
+                public static void main(String[] args) throws Exception {
+                    System.out.println("una");
+                    System.out.flush();
+                    Thread.sleep(600);
+                    System.out.println("dos");
+                }
+            }
+            """;
+
+    @Test
+    void eachLineArrivesWhileTheProcessIsStillRunning() {
+        // The point of following an install: waiting for the process to finish before
+        // showing anything throws away the only part that is useful while it happens.
+        // The pause between the two lines is what proves the first was handed over
+        // before the second had even been written.
+        List<Long> arrivals = new java.util.concurrent.CopyOnWriteArrayList<>();
+        long start = System.nanoTime();
+
+        ProcessRunner.Result result = runInSourceMode(SLOW_EMITTER, "SlowEmitter",
+                line -> arrivals.add(System.nanoTime() - start));
+
+        assertThat(result.exitCode()).isZero();
+        assertThat(arrivals).hasSize(2);
+        assertThat(java.time.Duration.ofNanos(arrivals.get(1) - arrivals.get(0)))
+                .as("the second line should arrive after the pause, not with the first")
+                .isGreaterThan(java.time.Duration.ofMillis(300));
+    }
+
+    @Test
+    void theWholeOutputIsStillReturnedWhenTheLinesAreFollowed() {
+        ProcessRunner.Result result = runInSourceMode(SLOW_EMITTER, "SlowEmitter", line -> {
+        });
+
+        assertThat(result.output().lines()).containsExactly("una", "dos");
+    }
+
+    @Test
+    void aRunnerThatFollowsNothingStillBehavesAsItAlwaysDid() {
+        ProcessRunner.Result result = runner.run(List.of(java(), "-version"), null);
+
+        assertThat(result.exitCode()).isZero();
+        assertThat(result.output()).isNotEmpty();
+    }
+
     private final SystemProcessRunner runner = new SystemProcessRunner();
 
     /** The java command of the JVM running the tests, so no assumption about the PATH. */
@@ -100,17 +147,31 @@ class SystemProcessRunnerTest {
     }
 
     private ProcessRunner.Result runInSourceMode(String program, String name) {
-        return runInSourceMode(program, name, null);
+        return runInSourceMode(program, name, (String) null);
     }
 
     /** Runs a small program straight from source, which every modern JVM can do. */
     private ProcessRunner.Result runInSourceMode(String program, String name, String stdin) {
         try {
-            Path file = java.nio.file.Files.createTempDirectory("uocdb-test").resolve(name + ".java");
-            java.nio.file.Files.writeString(file, program);
-            return runner.run(List.of(java(), file.toString()), stdin);
+            return runner.run(List.of(java(), sourceFile(program, name)), stdin);
         } catch (Exception e) {
             throw new IllegalStateException(e);
         }
+    }
+
+    /** The same, following the output line by line as it is written. */
+    private ProcessRunner.Result runInSourceMode(String program, String name,
+            java.util.function.Consumer<String> onLine) {
+        try {
+            return runner.run(List.of(java(), sourceFile(program, name)), null, onLine);
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private static String sourceFile(String program, String name) throws java.io.IOException {
+        Path file = java.nio.file.Files.createTempDirectory("uocdb-test").resolve(name + ".java");
+        java.nio.file.Files.writeString(file, program);
+        return file.toString();
     }
 }

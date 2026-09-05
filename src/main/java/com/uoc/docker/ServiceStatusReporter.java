@@ -1,26 +1,28 @@
 package com.uoc.docker;
 
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
+import java.util.function.UnaryOperator;
 
 /**
- * Decides which of the statuses Docker reports are worth showing, and delivers
- * them.
+ * Keeps what is known about each service, and announces what the student should see.
  *
  * <p>
- * Docker describes what a container is doing; the panel has to describe what
- * the
- * student asked for. The two disagree while a service shuts down, because a
- * healthcheck
- * already in flight reports success after the stop was requested. Announcing
- * that would
- * flash a green "running" over a service on its way out, which is what this
- * guards.
+ * It holds a {@link ServiceState} per service and lets three things change it
+ * independently: what the student asked for, what command is running, and what Docker
+ * reports. After any of them, {@link ServiceState#displayed()} decides, so no rule about
+ * how the three combine lives here.
  *
  * <p>
- * The rules are kept away from the client library and from Swing so they can be
- * exercised on their own, with the delivery of each status observed directly.
+ * It used to work the other way round: each caller announced a status, and two sets of
+ * keys suppressed the announcements known to be wrong. Every new situation added another
+ * guard, and the guards could not be reasoned about together.
+ *
+ * <p>
+ * A status is only delivered when it differs from the last one, so the poll that runs
+ * every few seconds does not repaint a service that has not moved.
  */
 public class ServiceStatusReporter {
 
@@ -33,18 +35,31 @@ public class ServiceStatusReporter {
         void onFailure(String key, String details);
     }
 
+    /**
+     * Receives how an install is going, as often as Docker says anything.
+     *
+     * <p>
+     * The text is the whole of what should be on screen, not an addition to it: fetching
+     * an image means the same handful of lines counting up, so each report replaces the
+     * last rather than being appended to it.
+     */
+    public interface ProgressListener {
+        void onProgress(String key, String text);
+    }
+
     private final Consumer<Runnable> dispatcher;
-    private final Set<String> watchedKeys = ConcurrentHashMap.newKeySet();
-    private final Set<String> stoppingKeys = ConcurrentHashMap.newKeySet();
+    private final Map<String, ServiceState> states = new ConcurrentHashMap<>();
+    private final Map<String, ServiceStatus> announced = new ConcurrentHashMap<>();
 
     private volatile StatusListener listener = (key, status) -> {
     };
     private volatile FailureListener failureListener = (key, details) -> {
     };
+    private volatile ProgressListener progressListener = (key, text) -> {
+    };
 
     /**
-     * @param dispatcher runs each notification where the listener expects to be
-     *                   called,
+     * @param dispatcher runs each notification where the listener expects to be called,
      *                   which in the application is the interface thread
      */
     public ServiceStatusReporter(Consumer<Runnable> dispatcher) {
@@ -59,56 +74,58 @@ public class ServiceStatusReporter {
         this.failureListener = failureListener;
     }
 
-    /**
-     * Remembers a service, so it keeps being polled and is told about a lost
-     * daemon.
-     */
+    public void setProgressListener(ProgressListener progressListener) {
+        this.progressListener = progressListener;
+    }
+
+    /** Passes on how an install is going, on the thread the listener expects. */
+    public void reportProgress(String key, String text) {
+        dispatcher.accept(() -> progressListener.onProgress(key, text));
+    }
+
+    /** Remembers a service, so it keeps being polled and is told about a lost daemon. */
     public void watch(String key) {
-        watchedKeys.add(key);
+        states.computeIfAbsent(key, k -> ServiceState.unknown());
     }
 
     public Set<String> watchedKeys() {
-        return Set.copyOf(watchedKeys);
+        return Set.copyOf(states.keySet());
+    }
+
+    /** What is currently known about a service. */
+    public ServiceState stateOf(String key) {
+        return states.getOrDefault(key, ServiceState.unknown());
     }
 
     /**
-     * The student asked for this service to run, so late stop reports no longer
-     * apply.
+     * The student has asked for something, so the last command's failure stops being what
+     * they need to see. What they asked for is not kept: the command about to run says it
+     * better, and an intent that outlives its command only starts lying in the other
+     * direction.
      */
-    public void expectRunning(String key) {
-        watch(key);
-        stoppingKeys.remove(key);
+    public void retrying(String key) {
+        change(key, ServiceState::retrying);
+    }
+
+    /** A command has begun against this service, or has finished. */
+    public void enterPhase(String key, Phase phase) {
+        change(key, state -> state.withPhase(phase));
+    }
+
+    /** Docker has been asked about this service and answered. */
+    public void observe(String key, Observation observation) {
+        change(key, state -> state.withObservation(observation));
     }
 
     /**
-     * The student asked for this service to stop, so late health reports are
-     * ignored.
+     * Reports a service as failed, along with whatever Docker said about it.
+     *
+     * <p>
+     * This is the launcher's own failure to run a command rather than anything read off a
+     * container, so it is announced directly instead of through the state.
      */
-    public void expectStopped(String key) {
-        watch(key);
-        stoppingKeys.add(key);
-    }
-
-    /**
-     * Announces a status, unless it contradicts a stop the student already asked
-     * for.
-     * A service reported as stopped always gets through and settles the matter.
-     */
-    public void report(String key, ServiceStatus status) {
-        if (status == ServiceStatus.STOPPED) {
-            stoppingKeys.remove(key);
-            deliver(key, ServiceStatus.STOPPED);
-            return;
-        }
-        if (stoppingKeys.contains(key)) {
-            return;
-        }
-        deliver(key, status);
-    }
-
-    /** Reports a service as failed, along with whatever Docker said about it. */
     public void reportFailure(String key, String details) {
-        deliver(key, ServiceStatus.ERROR);
+        change(key, ServiceState::withCommandFailed);
         if (details != null && !details.isBlank()) {
             dispatcher.accept(() -> failureListener.onFailure(key, details.strip()));
         }
@@ -116,12 +133,22 @@ public class ServiceStatusReporter {
 
     /** The daemon is gone, so nothing that is known can be described any more. */
     public void reportEverythingUnreachable() {
-        for (String key : watchedKeys) {
-            deliver(key, ServiceStatus.ERROR);
+        for (String key : Set.copyOf(states.keySet())) {
+            change(key, state -> state.withObservation(Observation.DAEMON_LOST));
         }
     }
 
+    private void change(String key, UnaryOperator<ServiceState> how) {
+        ServiceState updated = states.compute(key,
+                (k, current) -> how.apply(current == null ? ServiceState.unknown() : current));
+        deliver(key, updated.displayed());
+    }
+
+    /** Announces a status, unless it is the one already showing. */
     private void deliver(String key, ServiceStatus status) {
-        dispatcher.accept(() -> listener.onStatusChanged(key, status));
+        ServiceStatus previous = announced.put(key, status);
+        if (status != previous) {
+            dispatcher.accept(() -> listener.onStatusChanged(key, status));
+        }
     }
 }

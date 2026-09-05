@@ -92,10 +92,13 @@ class ServiceLifecycleIntegrationTest extends DockerIntegrationTestBase {
         awaitStatus(ServiceStatus.HEALTHY);
 
         // The student has to be told it is on its way before it is ready, or the panel
-        // looks frozen for as long as the image takes to come up.
-        assertThat(seen).startsWith(ServiceStatus.STARTING);
+        // looks frozen for as long as the image takes to come up. What comes before that
+        // is whatever the service already was, which for one nobody has touched yet is
+        // stopped.
+        assertThat(seen).contains(ServiceStatus.STARTING);
         assertThat(seen.indexOf(ServiceStatus.STARTING))
                 .isLessThan(seen.indexOf(ServiceStatus.HEALTHY));
+        assertThat(seen).doesNotContain(ServiceStatus.ERROR, ServiceStatus.CRASHED);
         assertThat(failures).isEmpty();
     }
 

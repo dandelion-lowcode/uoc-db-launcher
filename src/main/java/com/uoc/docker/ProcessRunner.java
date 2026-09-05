@@ -1,6 +1,7 @@
 package com.uoc.docker;
 
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * Runs an external command and reports what it wrote and how it ended.
@@ -35,4 +36,26 @@ public interface ProcessRunner {
      * @return the outcome; never {@code null}
      */
     Result run(List<String> command, String stdin);
+
+    /**
+     * The same, but handing over each line as it is written rather than all of them at
+     * the end.
+     *
+     * <p>
+     * Fetching an image takes minutes and says so the whole time, and a student watching
+     * a still panel has no way to tell a download from a launcher that has stopped
+     * responding. Waiting for the process to finish before showing anything throws away
+     * the only part of that which is useful while it happens.
+     *
+     * <p>
+     * The default reads nothing early and simply replays the finished output, which is
+     * enough for the stand-ins the tests use; the real runner overrides it.
+     *
+     * @param onLine called with each line, on the thread running the command
+     */
+    default Result run(List<String> command, String stdin, Consumer<String> onLine) {
+        Result result = run(command, stdin);
+        result.output().lines().forEach(onLine);
+        return result;
+    }
 }
