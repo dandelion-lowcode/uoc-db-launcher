@@ -1,14 +1,10 @@
 package com.uoc.ui;
 
 import java.awt.BorderLayout;
-import java.awt.Color;
 import java.awt.FlowLayout;
-import java.awt.Font;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
-import java.util.HashMap;
-import java.util.Map;
 
 import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
@@ -17,48 +13,35 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
-import javax.swing.JTextPane;
 import javax.swing.KeyStroke;
-import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
-import javax.swing.text.AttributeSet;
-import javax.swing.text.BadLocationException;
-import javax.swing.text.Element;
-import javax.swing.text.SimpleAttributeSet;
-import javax.swing.text.StyleConstants;
-import javax.swing.text.StyledDocument;
 
 import com.formdev.flatlaf.extras.FlatSVGIcon;
-import com.formdev.flatlaf.util.UIScale;
-import com.uoc.ansi.AnsiColor;
-import com.uoc.ansi.AnsiEditorKit;
 import com.uoc.ansi.AnsiEscCode;
-import com.uoc.ansi.IAnsiColors;
-import com.uoc.ansi.ThemeAnsiColors;
 import com.uoc.docker.Database;
 import com.uoc.docker.QueryRunner;
 import com.uoc.i18n.Message;
 import com.uoc.i18n.Translations;
-import com.uoc.ui.menu.ConsoleFontManager;
 
+/**
+ * One database's console: the trace it prints into, the box a query is typed in, and the
+ * decisions about which of the two the student is looking at.
+ *
+ * <p>
+ * What the text looks like on screen is not decided here. {@link ConsoleTrace} holds it
+ * and draws it; this class chooses what goes into it and when -- a worked example while
+ * there is nothing else to show, an install's progress while an image is being fetched,
+ * and the queries and their answers once there is a database to ask.
+ */
 public class DatabaseTab {
 
     private static final int ACTION_ICON_SIZE = 16;
-
-    // The size the console is read at before any zooming. Everything the student
-    // reads
-    // and types is drawn at this size scaled by the zoom, so the menus and the
-    // console
-    // grow together instead of the console staying small while the rest gets
-    // bigger.
-    private static final int CONSOLE_FONT_SIZE = 12;
     private static final int INPUT_ROWS = 4;
 
     // Names for the parts a test drives. Finding a component by name rather than by
     // its
     // position or its label keeps the tests working when the layout or the wording
     // moves.
-    static final String SESSION = "session";
     static final String INPUT = "input";
     static final String SEND = "send";
     static final String CLEAR = "clear";
@@ -69,8 +52,7 @@ public class DatabaseTab {
     private final Database database;
     private final JPanel panel;
     private final JLabel sessionLabel;
-    private final JTextPane sessionPane;
-    private final AnsiEditorKit ansiEditorKit;
+    private final ConsoleTrace trace;
     private final JTextArea inputArea;
     private final JButton sendButton;
     private final JButton clearButton;
@@ -85,38 +67,24 @@ public class DatabaseTab {
     // answered, which only this class knows. Without keeping them apart, a status
     // poll
     // reopens the console on top of a query that is still on its way.
-    // The console is read in whatever monospaced font was chosen; the runtime's own
-    // is
-    // the one every system is guaranteed to have.
-    private String fontFamily = ConsoleFontManager.SYSTEM_MONOSPACED;
     private boolean serviceReady;
     private boolean awaitingAnswer;
+
+    // Whether an image is being fetched, which decides both halves of the console: the
+    // box for typing is away, and the worked example stays away with it rather than
+    // appearing under a download in progress.
     private boolean installing;
 
-    // The worked example standing in for an empty trace. It is content like any
-    // other as
-    // far as the document is concerned, so it has to be remembered to be taken away
-    // again
-    // the moment there is something real to show.
-    private boolean showingPlaceholder;
     private Translations translations;
 
     public DatabaseTab(Database database, QueryRunner queryRunner) {
         this.database = database;
-        ansiEditorKit = new AnsiEditorKit(scaledFontSize(), currentThemeColors());
-        ansiEditorKit.setFontFamily(fontFamily);
-
-        sessionPane = new JTextPane();
-        sessionPane.setName(SESSION);
-        sessionPane.setEditorKit(ansiEditorKit);
-        sessionPane.setFont(consoleFont());
-        sessionPane.setEditable(false);
-        JScrollPane sessionScroll = new JScrollPane(sessionPane);
+        trace = new ConsoleTrace();
 
         inputArea = new JTextArea(INPUT_ROWS, 0);
         inputArea.setName(INPUT);
         inputArea.setLineWrap(true);
-        inputArea.setFont(consoleFont());
+        inputArea.setFont(trace.font());
         JScrollPane inputScroll = new JScrollPane(inputArea);
 
         sendButton = new JButton(themedIcon(SEND_ICON));
@@ -135,12 +103,12 @@ public class DatabaseTab {
             if (query.isEmpty()) {
                 return;
             }
-            appendToSession("> " + query + "\n");
+            trace.append("> " + query + "\n");
             inputArea.setText("");
             awaitingAnswer = true;
             updateSendButton();
             queryRunner.run(database.key(), query, output -> {
-                appendToSession(output.endsWith("\n") ? output : output + "\n");
+                trace.append(output.endsWith("\n") ? output : output + "\n");
                 awaitingAnswer = false;
                 updateSendButton();
             });
@@ -182,7 +150,7 @@ public class DatabaseTab {
 
         JPanel sessionPanel = new JPanel(new BorderLayout(5, 5));
         sessionPanel.add(sessionLabel, BorderLayout.NORTH);
-        sessionPanel.add(sessionScroll, BorderLayout.CENTER);
+        sessionPanel.add(trace.getComponent(), BorderLayout.CENTER);
 
         panel = new JPanel(new BorderLayout(5, 5));
         panel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
@@ -190,21 +158,12 @@ public class DatabaseTab {
         panel.add(inputPanel, BorderLayout.SOUTH);
     }
 
-    private static int scaledFontSize() {
-        return UIScale.scale(CONSOLE_FONT_SIZE);
-    }
-
-    private Font consoleFont() {
-        return new Font(fontFamily, Font.PLAIN, scaledFontSize());
-    }
-
     /**
      * Redraws the console at the current zoom, the text already on screen included.
      */
     public void applyZoom() {
-        if (scaledFontSize() != ansiEditorKit.getFontSize()) {
-            redrawConsole();
-        }
+        trace.applyZoom();
+        matchTheTrace();
     }
 
     /**
@@ -212,85 +171,21 @@ public class DatabaseTab {
      * colours.
      */
     public void applyFont(String family) {
-        if (family == null || family.equals(fontFamily)) {
-            return;
-        }
-        fontFamily = family;
-        redrawConsole();
+        trace.applyFont(family);
+        matchTheTrace();
     }
 
     /**
-     * Puts the current font and size on the console and on everything already
-     * printed in
-     * it, so a session never ends up written half one way and half another.
+     * The box a query is typed in is read alongside the trace, so it is drawn the same
+     * way. Left to decide for itself it kept whatever size it was built at while the
+     * trace grew, and the two halves of the console stopped matching.
      */
-    private void redrawConsole() {
-        int size = scaledFontSize();
-        ansiEditorKit.setFontSize(size);
-        ansiEditorKit.setFontFamily(fontFamily);
-
-        Font font = consoleFont();
-        sessionPane.setFont(font);
-        inputArea.setFont(font);
-
-        SimpleAttributeSet restyled = new SimpleAttributeSet();
-        StyleConstants.setFontSize(restyled, size);
-        StyleConstants.setFontFamily(restyled, fontFamily);
-        StyledDocument doc = sessionPane.getStyledDocument();
-        doc.setCharacterAttributes(0, doc.getLength(), restyled, false);
-    }
-
-    private static IAnsiColors currentThemeColors() {
-        return new ThemeAnsiColors();
+    private void matchTheTrace() {
+        inputArea.setFont(trace.font());
     }
 
     public void applyThemeColors() {
-        IAnsiColors oldColors = ansiEditorKit.getAnsiColors();
-        IAnsiColors newColors = currentThemeColors();
-        ansiEditorKit.setAnsiColors(newColors);
-        remapExistingColors(oldColors, newColors);
-    }
-
-    private void remapExistingColors(IAnsiColors oldColors, IAnsiColors newColors) {
-        // What was painted in the old theme's colours has to be repainted in the new
-        // one's, colour for colour. Walking the palette says that once; naming each
-        // colour said it seventeen times and would have said it eighteen the next time
-        // one was added.
-        Map<Color, Color> colorMap = new HashMap<>();
-        for (AnsiColor colour : AnsiColor.values()) {
-            colorMap.put(oldColors.of(colour), newColors.of(colour));
-        }
-
-        StyledDocument doc = sessionPane.getStyledDocument();
-        Element root = doc.getDefaultRootElement();
-        for (int p = 0; p < root.getElementCount(); p++) {
-            Element paragraph = root.getElement(p);
-            for (int c = 0; c < paragraph.getElementCount(); c++) {
-                Element run = paragraph.getElement(c);
-                AttributeSet attrs = run.getAttributes();
-
-                Color newForeground = attrs.isDefined(StyleConstants.Foreground)
-                        ? colorMap.get(StyleConstants.getForeground(attrs))
-                        : null;
-                Color newBackground = attrs.isDefined(StyleConstants.Background)
-                        ? colorMap.get(StyleConstants.getBackground(attrs))
-                        : null;
-
-                if (newForeground == null && newBackground == null) {
-                    continue;
-                }
-
-                SimpleAttributeSet change = new SimpleAttributeSet();
-                if (newForeground != null) {
-                    StyleConstants.setForeground(change, newForeground);
-                }
-                if (newBackground != null) {
-                    StyleConstants.setBackground(change, newBackground);
-                }
-                doc.setCharacterAttributes(run.getStartOffset(), run.getEndOffset() - run.getStartOffset(),
-                        change, false);
-            }
-        }
+        trace.applyThemeColors();
     }
 
     // The action icons ship with a fixed light grey fill, so they are remapped to
@@ -304,17 +199,8 @@ public class DatabaseTab {
     }
 
     private void clearSession() {
-        emptySession();
+        trace.clear();
         showPlaceholder();
-    }
-
-    private void emptySession() {
-        try {
-            StyledDocument doc = sessionPane.getStyledDocument();
-            doc.remove(0, doc.getLength());
-        } catch (BadLocationException e) {
-            throw new IllegalStateException(e);
-        }
     }
 
     /**
@@ -333,35 +219,7 @@ public class DatabaseTab {
         if (translations == null || installing) {
             return;
         }
-        showingPlaceholder = true;
-        appendAnsi(ConsoleExamples.placeholderFor(database, translations));
-    }
-
-    private void appendToSession(String text) {
-        // Real output replaces the example rather than following it, so a student's
-        // first
-        // answer does not arrive underneath a query they never ran.
-        if (showingPlaceholder) {
-            showingPlaceholder = false;
-            emptySession();
-        }
-        appendAnsi(text);
-    }
-
-    private void appendAnsi(String text) {
-        try {
-            StyledDocument doc = sessionPane.getStyledDocument();
-            ansiEditorKit.insertAnsi(doc, text, doc.getLength());
-            sessionPane.setCaretPosition(doc.getLength());
-            SwingUtilities.invokeLater(() -> {
-                try {
-                    sessionPane.scrollRectToVisible(sessionPane.modelToView2D(doc.getLength()).getBounds());
-                } catch (Exception ignored) {
-                }
-            });
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+        trace.showPlaceholder(ConsoleExamples.placeholderFor(database, translations));
     }
 
     /**
@@ -389,17 +247,16 @@ public class DatabaseTab {
             inputPanel.setVisible(false);
             panel.revalidate();
         }
-        emptySession();
-        showingPlaceholder = false;
+        trace.clear();
 
         // A heading in the ordinary colour, then what Docker is saying in grey. The
         // heading is what the student is meant to read; the lines under it are there to
         // show that something is still happening, not to be followed word by word.
         if (translations != null) {
-            appendAnsi(translations.format(Message.CONSOLE_INSTALLING, database.displayName())
+            trace.append(translations.format(Message.CONSOLE_INSTALLING, database.displayName())
                     + "\n\n");
         }
-        appendAnsi(AnsiEscCode.BRIGHT_BLACK.escCode
+        trace.append(AnsiEscCode.BRIGHT_BLACK.escCode
                 + (text.endsWith("\n") ? text : text + "\n")
                 + AnsiEscCode.RESET.escCode);
     }
@@ -429,8 +286,6 @@ public class DatabaseTab {
         // A failed one keeps every line. That text is the only account of what went
         // wrong, and clearing it would leave a red dot and no explanation.
         if (succeeded) {
-            emptySession();
-            showingPlaceholder = false;
             showPlaceholder();
         }
     }
@@ -460,7 +315,7 @@ public class DatabaseTab {
      * panel.
      */
     public void showFailure(String text) {
-        appendToSession(AnsiEscCode.RED.escCode + text + AnsiEscCode.RESET.escCode + "\n\n");
+        trace.append(AnsiEscCode.RED.escCode + text + AnsiEscCode.RESET.escCode + "\n\n");
     }
 
     /**
@@ -488,8 +343,7 @@ public class DatabaseTab {
             // Written again in the new language. Only while it is the only thing there:
             // a session the student has worked in is theirs, and rewriting it would
             // throw away what they had done.
-            if (showingPlaceholder || sessionPane.getDocument().getLength() == 0) {
-                emptySession();
+            if (trace.isShowingPlaceholder() || trace.isEmpty()) {
                 showPlaceholder();
             }
         });
