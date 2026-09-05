@@ -45,7 +45,10 @@ jobs:
     runs-on: ubuntu-latest
     # A tag is about to publish four executables, which is the moment to find out that a
     # console no longer answers what it promises.
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    # Any tag, however it is spelled: one pushed as "1.1.1" rather than "v1.1.1" is still
+    # a release going out, and asking for the v was how a release once went out with
+    # nothing in it.
+    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
     # Ten databases, pulled and started one at a time. Vertica alone is a gigabyte.
     timeout-minutes: 60
 

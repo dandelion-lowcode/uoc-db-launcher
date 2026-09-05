@@ -16,6 +16,13 @@ on:
   push:
     tags:
       - "v*"
+      # A tag written without the v builds too. One was pushed as "1.1.1", matched
+      # nothing here, and built nothing: the release sat at the top of the page marked
+      # Latest with not one file under it, which is what a student meets when they come
+      # to download the thing. A release that quietly contains nothing is worse than no
+      # release, and the difference was a character. The version is read below with the v
+      # stripped, so either spelling produces the same archives.
+      - "[0-9]*"
   workflow_dispatch:
 
 env:
