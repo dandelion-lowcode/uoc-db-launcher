@@ -1,17 +1,5 @@
 package com.uoc.docker;
 
-import com.github.dockerjava.api.DockerClient;
-import com.github.dockerjava.api.async.ResultCallback;
-import com.github.dockerjava.api.command.HealthState;
-import com.github.dockerjava.api.command.InspectContainerResponse;
-import com.github.dockerjava.api.exception.NotFoundException;
-import com.github.dockerjava.api.model.Event;
-import com.github.dockerjava.api.model.EventType;
-import com.github.dockerjava.core.DefaultDockerClientConfig;
-import com.github.dockerjava.core.DockerClientImpl;
-import com.github.dockerjava.transport.DockerHttpClient;
-import com.github.dockerjava.zerodep.ZerodepDockerHttpClient;
-
 import com.uoc.platform.UserDataDirectory;
 
 import javax.swing.SwingUtilities;
@@ -20,6 +8,7 @@ import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
@@ -46,7 +35,51 @@ public class DockerManager {
             "destroy", "rename", "update", "oom", "health_status");
     private static final int RECONNECT_SECONDS = 5;
 
-    private final DockerClient client;
+    private static final String EVENTS = "events";
+    private static final String FILTER = "--filter";
+    private static final String FORMAT = "--format";
+    private static final String CONTAINER_EVENTS_ONLY = "type=container";
+
+    /**
+     * One line per event: the container's name, a tab, and what happened to it.
+     *
+     * <p>
+     * Docker can also print the whole event as JSON, which would mean carrying a JSON
+     * parser to read two fields out of it. The tab is what separates them, because a
+     * container name cannot hold one and an action can hold a space: health events arrive
+     * as "health_status: healthy".
+     */
+    private static final String EVENT_FORMAT = "{{.Actor.Attributes.name}}\t{{.Action}}";
+
+    private static final String FIELD_SEPARATOR = "\t";
+
+    private static final String INSPECT = "inspect";
+
+    /**
+     * The four fields of a container's state that anything here decides on, and nothing
+     * else. A template rather than the whole of the JSON, which is some thirty kilobytes
+     * a service and would need a parser to read four values out of.
+     *
+     * <p>
+     * The healthcheck is printed only when the image defines one, so a service without
+     * one leaves the field empty rather than making the answer unreadable.
+     */
+    private static final String STATE_FORMAT = "{{.State.Status}}\t{{.State.OOMKilled}}\t"
+            + "{{.State.ExitCode}}\t{{if .State.Health}}{{.State.Health.Status}}{{end}}";
+
+    private static final int STATUS = 0;
+    private static final int OOM_KILLED = 1;
+    private static final int EXIT_CODE = 2;
+    private static final int HEALTH = 3;
+
+    /**
+     * What Docker says when there is no such container: "no such object" from a recent
+     * daemon and "No such container" from an older one, capitalised or not depending on
+     * the version. It is the one failed inspect that is an answer about the container
+     * rather than about the daemon.
+     */
+    private static final String NO_SUCH_CONTAINER = "no such";
+
     private final ProcessRunner processRunner;
     private final ExecutorService executor = Executors.newCachedThreadPool();
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
@@ -57,23 +90,22 @@ public class DockerManager {
     /** The services a compose command is running against right now. */
     private final java.util.Set<String> busy = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
+    /** The docker events process, for as long as there is one to end. */
+    private volatile ProcessRunner.LiveProcess events;
+
     private volatile boolean closed;
 
     public DockerManager() {
-        this(defaultClient(), new SystemProcessRunner(), SwingUtilities::invokeLater,
-                installBundledFiles());
+        this(new SystemProcessRunner(), SwingUtilities::invokeLater, installBundledFiles());
     }
 
     /**
      * Lets a test watch the statuses as they are decided, by delivering them where
      * it can
-     * see them rather than on the interface thread, and point Docker at a compose
-     * file of
-     * its own choosing.
+     * see them rather than on the interface thread, put a stand-in in the way of every
+     * Docker command, and point Docker at a compose file of its own choosing.
      */
-    DockerManager(DockerClient client, ProcessRunner processRunner, Consumer<Runnable> dispatcher,
-            Path composeFile) {
-        this.client = client;
+    DockerManager(ProcessRunner processRunner, Consumer<Runnable> dispatcher, Path composeFile) {
         this.processRunner = processRunner;
         this.reporter = new ServiceStatusReporter(dispatcher);
         this.composeFile = composeFile;
@@ -102,17 +134,6 @@ public class DockerManager {
         }
     }
 
-    private static DockerClient defaultClient() {
-        // The library resolves the endpoint from DOCKER_HOST, DOCKER_CONTEXT and the
-        // active Docker context, so it reaches the same daemon as the command line.
-        DefaultDockerClientConfig config = DefaultDockerClientConfig.createDefaultConfigBuilder().build();
-        DockerHttpClient httpClient = new ZerodepDockerHttpClient.Builder()
-                .dockerHost(config.getDockerHost())
-                .sslConfig(config.getSSLConfig())
-                .build();
-        return DockerClientImpl.getInstance(config, httpClient);
-    }
-
     /**
      * Begins listening to Docker. Kept apart from construction so the listeners are
      * attached first, and nothing is decided before anyone is watching.
@@ -126,13 +147,16 @@ public class DockerManager {
 
     /** Stops listening. The containers themselves are left running. */
     public void close() {
-        // Set before shutting anything down: closing the event stream makes Docker call
-        // back with an error, and that must not be mistaken for a lost daemon.
+        // Set before shutting anything down: ending the event stream looks exactly like
+        // the stream ending on its own, and that must not be mistaken for a lost daemon.
         closed = true;
         scheduler.shutdownNow();
         executor.shutdownNow();
         try {
-            client.close();
+            ProcessRunner.LiveProcess running = events;
+            if (running != null) {
+                running.stop();
+            }
         } catch (Exception e) {
             // Nothing useful can be done while shutting down.
         }
@@ -241,42 +265,47 @@ public class DockerManager {
         }
     }
 
+    /**
+     * Asks Docker to report every container event until it is stopped.
+     *
+     * <p>
+     * The command outlives this call and writes a line per event, so the stream ending is
+     * the daemon being gone. That is the only ending there is: the launcher never asks
+     * for one except when it is closing.
+     */
     private void watchEvents() {
+        if (closed) {
+            return;
+        }
         try {
-            client.eventsCmd()
-                    .withEventTypeFilter(EventType.CONTAINER)
-                    .exec(new ResultCallback.Adapter<Event>() {
-                        @Override
-                        public void onNext(Event event) {
-                            handleEvent(event);
-                        }
-
-                        @Override
-                        public void onError(Throwable throwable) {
-                            connectionLost();
-                        }
-
-                        @Override
-                        public void onComplete() {
-                            connectionLost();
-                        }
-                    });
+            events = processRunner.stream(
+                    List.of(DockerCommand.EXECUTABLE, EVENTS, FILTER, CONTAINER_EVENTS_ONLY,
+                            FORMAT, EVENT_FORMAT),
+                    this::handleEvent, this::connectionLost);
         } catch (Exception e) {
+            // A stream that cannot even be begun is a connection that has been lost
+            // before it was made, and is retried on the same terms as any other.
             connectionLost();
         }
     }
 
-    private void handleEvent(Event event) {
-        String name = event.getActor() != null && event.getActor().getAttributes() != null
-                ? event.getActor().getAttributes().get("name")
-                : null;
+    private void handleEvent(String line) {
+        if (closed) {
+            return;
+        }
+        int separator = line.indexOf(FIELD_SEPARATOR);
+        if (separator < 0) {
+            return;
+        }
+
+        String name = line.substring(0, separator);
         if (!DockerCommand.isManagedContainer(name)) {
             return;
         }
 
         String key = DockerCommand.serviceKey(name);
-        String action = event.getAction();
-        if (action == null || !SIGNIFICANT_ACTIONS.contains(baseAction(action))) {
+        String action = line.substring(separator + FIELD_SEPARATOR.length());
+        if (!SIGNIFICANT_ACTIONS.contains(baseAction(action))) {
             return;
         }
 
@@ -296,7 +325,7 @@ public class DockerManager {
      * the container is inspected either way.
      */
     private static String baseAction(String action) {
-        String normalized = action.trim().toLowerCase(java.util.Locale.ROOT);
+        String normalized = action.trim().toLowerCase(Locale.ROOT);
         int colon = normalized.indexOf(':');
         return colon < 0 ? normalized : normalized.substring(0, colon).trim();
     }
@@ -357,39 +386,56 @@ public class DockerManager {
     }
 
     private void reconcileStatus(String key) {
-        try {
-            InspectContainerResponse info = client.inspectContainerCmd(DockerCommand.containerName(key)).exec();
-            reporter.observe(key, observationOf(info.getState()));
-        } catch (NotFoundException e) {
-            reporter.observe(key, Observation.ABSENT);
-        } catch (Exception e) {
-            // Anything else means the question could not be put to Docker at all, which
-            // says nothing about the container and everything about the daemon.
-            reporter.observe(key, Observation.DAEMON_LOST);
-        }
+        ProcessRunner.Result answer = processRunner.run(List.of(DockerCommand.EXECUTABLE,
+                INSPECT, FORMAT, STATE_FORMAT, DockerCommand.containerName(key)), null);
+        reporter.observe(key, observationOf(answer));
     }
 
     /**
      * Reads a container's state into the one value the rules are written against.
      *
      * <p>
-     * Five fields are used where one used to be. {@code running} alone is not
-     * enough: it
-     * is true for a paused container and true throughout a restart loop, so a
-     * service
-     * that is answering nobody, and one that is crashing over and over, both read
-     * as
-     * working. The status field separates them, and OOMKilled is what tells a
-     * container
-     * the kernel killed for its memory from one that merely stopped.
+     * Four fields are asked for where one used to be. {@code running} alone is not
+     * enough: it is true for a paused container and true throughout a restart loop, so a
+     * service that is answering nobody, and one that is crashing over and over, both read
+     * as working. The status field separates them, and OOMKilled is what tells a
+     * container the kernel killed for its memory from one that merely stopped.
+     *
+     * <p>
+     * A failure is not one answer but two, and they mean opposite things. No such
+     * container is an answer -- there is nothing there, and starting it is exactly what
+     * the student should be offered -- while a daemon that cannot be reached says nothing
+     * about any container at all. Only the message tells them apart.
      */
-    private static Observation observationOf(InspectContainerResponse.ContainerState state) {
-        if (state == null) {
-            return Observation.ABSENT;
+    private static Observation observationOf(ProcessRunner.Result answer) {
+        if (answer.failed()) {
+            return answer.output().toLowerCase(Locale.ROOT).contains(NO_SUCH_CONTAINER)
+                    ? Observation.ABSENT
+                    : Observation.DAEMON_LOST;
         }
-        HealthState health = state.getHealth();
-        String healthStatus = health == null ? null : health.getStatus();
-        return Observation.of(state.getStatus(), Boolean.TRUE.equals(state.getOOMKilled()),
-                state.getExitCodeLong().intValue(), healthStatus);
+
+        // Kept whole rather than stripped: with no healthcheck the line ends in a
+        // separator with nothing after it, and trimming would leave one field short.
+        String[] state = answer.output().lines().findFirst().orElse("")
+                .split(FIELD_SEPARATOR, -1);
+        return Observation.of(field(state, STATUS), Boolean.parseBoolean(field(state, OOM_KILLED)),
+                exitCode(field(state, EXIT_CODE)), field(state, HEALTH));
+    }
+
+    /** One field of the template's answer, or nothing when Docker printed fewer. */
+    private static String field(String[] state, int index) {
+        return index < state.length ? state[index].trim() : "";
+    }
+
+    /**
+     * Docker prints a whole number here. Anything else is read as no exit code rather
+     * than refused, because the status beside it is what decides and it is still good.
+     */
+    private static Integer exitCode(String reported) {
+        try {
+            return Integer.valueOf(reported);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 }

@@ -4,6 +4,10 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -28,6 +32,67 @@ class SystemProcessRunnerTest {
                 }
             }
             """;
+
+    /** Writes one line and then stays up, the way a stream that is watched does. */
+    private static final String ENDLESS_EMITTER = """
+            public class EndlessEmitter {
+                public static void main(String[] args) throws Exception {
+                    System.out.println("una");
+                    System.out.flush();
+                    Thread.sleep(600000);
+                }
+            }
+            """;
+
+    /** Long enough to cover compiling the little programs below on a busy machine. */
+    private static final int LIMIT_SECONDS = 60;
+
+    @Test
+    void aStreamedCommandHandsOverWhatItWritesWhileItIsStillRunning() {
+        // Docker's event stream never ends on its own, so a caller that waited for the
+        // process would hear about the first event when the daemon went away and not
+        // before.
+        BlockingQueue<String> lines = new LinkedBlockingQueue<>();
+        CountDownLatch ended = new CountDownLatch(1);
+
+        ProcessRunner.LiveProcess running =
+                streamInSourceMode(ENDLESS_EMITTER, "EndlessEmitter", lines::add, ended::countDown);
+
+        assertThat(nextLine(lines)).isEqualTo("una");
+        assertThat(ended.getCount())
+                .as("a process that is still running has not ended")
+                .isEqualTo(1);
+
+        running.stop();
+
+        assertThat(endedWithin(ended))
+                .as("stopping a stream has to be reported like any other ending")
+                .isTrue();
+    }
+
+    @Test
+    void aStreamedCommandThatEndsByItselfSaysSo() {
+        // Which is how a lost daemon is noticed: docker events exits, and that is the
+        // whole of the news.
+        CountDownLatch ended = new CountDownLatch(1);
+
+        streamInSourceMode(SLOW_EMITTER, "SlowEmitter", line -> {
+        }, ended::countDown);
+
+        assertThat(endedWithin(ended)).isTrue();
+    }
+
+    @Test
+    void aStreamedCommandThatCannotBeRunAtAllIsReportedAsEndedRatherThanThrowing() {
+        // A missing docker binary must reach the caller as a stream that is over, so it
+        // retries, rather than as an exception on a thread nobody is watching.
+        CountDownLatch ended = new CountDownLatch(1);
+
+        runner.stream(List.of("programa-que-no-existe-en-ningun-sitio"), line -> {
+        }, ended::countDown);
+
+        assertThat(endedWithin(ended)).isTrue();
+    }
 
     @Test
     void eachLineArrivesWhileTheProcessIsStillRunning() {
@@ -165,6 +230,36 @@ class SystemProcessRunnerTest {
         try {
             return runner.run(List.of(java(), sourceFile(program, name)), null, onLine);
         } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /** The same again, following a command that is not expected to end. */
+    private ProcessRunner.LiveProcess streamInSourceMode(String program, String name,
+            java.util.function.Consumer<String> onLine, Runnable onEnded) {
+        try {
+            return runner.stream(List.of(java(), sourceFile(program, name)), onLine, onEnded);
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private static String nextLine(BlockingQueue<String> lines) {
+        try {
+            String line = lines.poll(LIMIT_SECONDS, TimeUnit.SECONDS);
+            assertThat(line).as("no line ever arrived").isNotNull();
+            return line;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private static boolean endedWithin(CountDownLatch ended) {
+        try {
+            return ended.await(LIMIT_SECONDS, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
             throw new IllegalStateException(e);
         }
     }
