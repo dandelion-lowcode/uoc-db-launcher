@@ -1,12 +1,15 @@
 package com.uoc.ui;
 
-import javax.swing.JComponent;
-import javax.swing.Timer;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
+import java.util.LinkedHashSet;
+import java.util.Set;
+
+import javax.swing.JComponent;
+import javax.swing.Timer;
 
 public class PulsingCircle extends JComponent {
 
@@ -15,20 +18,30 @@ public class PulsingCircle extends JComponent {
     private static final float PHASE_STEP = 0.12f;
     private static final float TWO_PI = (float) (2 * Math.PI);
 
+    /**
+     * One clock for every circle on screen, rather than one each.
+     *
+     * <p>
+     * Eleven services means eleven of these, and each one used to wake the event
+     * thread twenty-five times a second on its own account. Shared, they also pulse
+     * together: separate timers drift apart, and a row of indicators breathing out of
+     * step looks like a fault rather than a rhythm.
+     */
+    private static final Set<PulsingCircle> pulsingNow = new LinkedHashSet<>();
+    private static float phase;
+    private static final Timer CLOCK = new Timer(TICK_MILLIS, event -> {
+        phase = (phase + PHASE_STEP) % TWO_PI;
+        pulsingNow.forEach(PulsingCircle::repaint);
+    });
+
     private Color color = Color.GRAY;
     private boolean pulsating;
-    private float phase;
-    private final Timer timer;
 
     public PulsingCircle() {
         Dimension size = new Dimension(SIZE, SIZE);
         setPreferredSize(size);
         setMinimumSize(size);
         setOpaque(false);
-        timer = new Timer(TICK_MILLIS, e -> {
-            phase = (phase + PHASE_STEP) % TWO_PI;
-            repaint();
-        });
     }
 
     public void setColor(Color color) {
@@ -42,10 +55,14 @@ public class PulsingCircle extends JComponent {
         }
         this.pulsating = pulsating;
         if (pulsating) {
-            timer.start();
+            pulsingNow.add(this);
+            CLOCK.start();
         } else {
-            timer.stop();
-            phase = 0f;
+            pulsingNow.remove(this);
+            // Nothing to animate, so nothing to wake up for.
+            if (pulsingNow.isEmpty()) {
+                CLOCK.stop();
+            }
         }
         repaint();
     }
