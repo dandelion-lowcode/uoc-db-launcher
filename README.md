@@ -111,6 +111,7 @@ The application unpacks the compose file and the notebooks into the user's own d
 directory, because an installed copy sits somewhere it may not write to. Which directory
 that is, and how the system's dark mode and its notion of a menu shortcut are found, is
 all in `com.uoc.platform`. Preferences -- theme, zoom, console font, and which services a
-student had open -- go through `java.util.prefs`. The language is not among them: it
-starts from the machine's own, or in Spanish when that is a language the launcher has no
-bundle for, and a choice made from the menu lasts as long as the window does.
+student had open -- go through `java.util.prefs`, the language among them. The machine's
+own language is asked once, on the first run: Catalan for a machine set to Catalan and
+Spanish for every other, that being the language the course is taught in. After that it
+is the student's last choice, and the machine is not consulted again.
