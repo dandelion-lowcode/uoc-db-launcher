@@ -214,7 +214,10 @@ public class Launcher {
                 }, tabs::applyFont));
         menuBar.add(LanguageMenu.build(translations, languageManager));
         menuBar.add(TutorialMenu.build(() -> tutorialManager.show(
-                servicesPanel.getComponent(), servicesPanel.actionButtonFor(Database.MONGO.key()),
+                // Beside the whole panel rather than beside MongoDB's own button. The
+                // button is at the panel's right edge, so a balloon placed to the left of
+                // it still lands on top of the rows it is telling the student to watch.
+                servicesPanel.getComponent(), servicesPanel.getComponent(),
                 servicesMenu), translations));
         menuBar.add(HelpMenu.build(frame, translations));
         return menuBar;

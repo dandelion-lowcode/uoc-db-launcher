@@ -300,12 +300,6 @@ public class ServicesPanel {
         return component;
     }
 
-    /**
-     * The one button beside a service, whichever action it is currently offering.
-     */
-    public JButton actionButtonFor(String key) {
-        return actionButtons.get(key);
-    }
 
     public void updateStatus(String key, ServiceStatus status) {
         currentStatus.put(key, status);
