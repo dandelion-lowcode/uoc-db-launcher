@@ -36,6 +36,7 @@ import com.uoc.ui.TutorialManager;
 import com.uoc.ui.menu.ConsoleFontManager;
 import com.uoc.ui.menu.DatabasesMenu;
 import com.uoc.ui.menu.FileMenu;
+import com.uoc.ui.menu.LanguageManager;
 import com.uoc.ui.menu.HelpMenu;
 import com.uoc.ui.menu.LanguageMenu;
 import com.uoc.ui.menu.OptionsMenu;
@@ -62,13 +63,13 @@ public class Launcher {
     private static final int CONTENT_GAP = 10;
 
     public static void main(String[] args) {
-        // Through the menu's own reading of the machine's language rather than straight
-        // from it, so that the window and the tick beside the language agree. Asked
-        // directly, a machine set to French would resolve to the bundle without a suffix,
-        // which is English, while the menu showed Spanish.
-        Translations translations = new Translations(
-                LanguageMenu.Language.of(Locale.getDefault()).locale());
         Preferences preferences = Preferences.userNodeForPackage(Launcher.class);
+        // What was chosen last time, or -- only on the first run on this machine -- what
+        // the machine itself is set to. The menu is handed the same manager, so the tick
+        // beside the language and the window it is drawn in cannot disagree.
+        LanguageManager languageManager = new LanguageManager(preferences);
+        Translations translations = new Translations(
+                languageManager.selectedLanguage().locale());
         ThemeManager themeManager = new ThemeManager(preferences);
         themeManager.applySavedTheme();
         ConsoleFontManager fontManager = new ConsoleFontManager(preferences);
@@ -78,11 +79,13 @@ public class Launcher {
             System.exit(1);
         }
         SwingUtilities.invokeLater(
-                () -> createAndShowGui(themeManager, fontManager, translations, preferences));
+                () -> createAndShowGui(themeManager, fontManager, languageManager,
+                        translations, preferences));
     }
 
     private static void createAndShowGui(ThemeManager themeManager,
-            ConsoleFontManager fontManager, Translations translations, Preferences preferences) {
+            ConsoleFontManager fontManager, LanguageManager languageManager,
+            Translations translations, Preferences preferences) {
         JFrame frame = new JFrame();
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setIconImage(new FlatSVGIcon(APP_ICON).getImage());
@@ -121,7 +124,8 @@ public class Launcher {
         // still has it.
         tabs.applyFont(fontManager.selectedFont());
 
-        frame.setJMenuBar(buildMenuBar(frame, themeManager, fontManager, translations, tabs,
+        frame.setJMenuBar(buildMenuBar(frame, themeManager, fontManager, languageManager,
+                translations, tabs,
                 dockerManager, servicesPanel, tutorialManager, preferences));
         frame.setContentPane(buildContentPane(tabs.getComponent(), servicesPanel));
         frame.setSize(startingSize(frame));
@@ -153,7 +157,8 @@ public class Launcher {
     }
 
     private static JMenuBar buildMenuBar(JFrame frame, ThemeManager themeManager,
-            ConsoleFontManager fontManager, Translations translations,
+            ConsoleFontManager fontManager, LanguageManager languageManager,
+            Translations translations,
             DatabaseTabs tabs, DockerManager dockerManager, ServicesPanel servicesPanel,
             TutorialManager tutorialManager, Preferences preferences) {
         JMenuBar menuBar = new JMenuBar();
@@ -169,7 +174,7 @@ public class Launcher {
                     tabs.applyThemeColors();
                     servicesPanel.applyThemeColors();
                 }, tabs::applyFont));
-        menuBar.add(LanguageMenu.build(translations));
+        menuBar.add(LanguageMenu.build(translations, languageManager));
         menuBar.add(TutorialMenu.build(() -> tutorialManager.show(
                 servicesPanel.getComponent(), servicesPanel.actionButtonFor(Database.MONGO.key()),
                 servicesMenu, tabs.notebooksButton()), translations));

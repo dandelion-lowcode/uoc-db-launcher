@@ -13,12 +13,8 @@ import java.util.Map;
 public final class LanguageMenu {
 
     /**
-     * The languages the bundles provide.
-     *
-     * <p>
-     * English is the one without a suffix, which makes it the bundle a missing language
-     * resolves to, but it is not what a student is shown: the course is taught in
-     * Spanish, so that is where the launcher starts unless the machine asks for Catalan.
+     * The languages the bundles provide. Which of them a session opens in is
+     * {@link LanguageManager}'s to answer.
      */
     public enum Language {
         // The order here is the order of the menu.
@@ -38,41 +34,38 @@ public final class LanguageMenu {
             return locale;
         }
 
-        /**
-         * The language a locale will actually be shown in.
-         *
-         * <p>
-         * Anything the launcher has no bundle for is Spanish, that being the language the
-         * course is taught in: a student whose machine is set to something else is far
-         * likelier to want the wording their notes use than English.
-         */
-        public static Language of(Locale locale) {
-            for (Language language : values()) {
-                if (language.locale.getLanguage().equals(locale.getLanguage())) {
-                    return language;
-                }
-            }
-            return SPANISH;
+        /** How this language names itself in the menu. */
+        Message message() {
+            return message;
         }
+
     }
 
     private LanguageMenu() {
     }
 
-    public static JMenu build(Translations translations) {
+    /**
+     * @param languages where a choice is remembered, and which one to show as chosen
+     */
+    public static JMenu build(Translations translations, LanguageManager languages) {
         Map<Language, JRadioButtonMenuItem> items = new EnumMap<>(Language.class);
         ButtonGroup group = new ButtonGroup();
         JMenu menu = new JMenu();
 
         for (Language language : Language.values()) {
             JRadioButtonMenuItem item = new JRadioButtonMenuItem();
-            item.addActionListener(e -> translations.setLocale(language.locale()));
+            item.addActionListener(e -> {
+                // Written down before the window is redrawn in it: the redrawing is the
+                // part that can fail, and a language shown is a language chosen.
+                languages.select(language);
+                translations.setLocale(language.locale());
+            });
             group.add(item);
             menu.add(item);
             items.put(language, item);
         }
 
-        items.get(Language.of(Locale.getDefault())).setSelected(true);
+        items.get(languages.selectedLanguage()).setSelected(true);
 
         translations.register(() -> {
             menu.setText(translations.get(Message.MENU_LANGUAGE));
