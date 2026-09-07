@@ -13,8 +13,8 @@ class LanguageMenuTest {
 
     @Test
     void theMenuOffersTheLanguagesInTheOrderTheCourseUsesThem() {
-        // Catalan and Spanish are the languages of the course; English is the fallback for
-        // everyone else, so it comes last.
+        // Catalan and Spanish are the languages of the course; English is there for
+        // anyone else who asks for it, so it comes last.
         assertThat(Language.values())
                 .containsExactly(Language.CATALAN, Language.SPANISH, Language.ENGLISH);
     }
@@ -33,10 +33,18 @@ class LanguageMenuTest {
     }
 
     @Test
-    void fallsBackToTheLanguageTheBundleWithoutASuffixProvides() {
-        // A machine set to German loads messages.properties, so English must be the one
-        // shown as selected rather than whichever item happens to come first.
-        assertEquals(Language.ENGLISH, Language.of(Locale.GERMAN));
-        assertEquals(Language.ENGLISH, Language.of(Locale.JAPANESE));
+    void anyOtherLanguageStartsInTheOneTheCourseIsTaughtIn() {
+        // Not English, which is only the bundle without a suffix. A student whose machine
+        // is set to something else is likelier to want the wording of their notes.
+        assertEquals(Language.SPANISH, Language.of(Locale.GERMAN));
+        assertEquals(Language.SPANISH, Language.of(Locale.JAPANESE));
+        assertEquals(Language.SPANISH, Language.of(Locale.of("gl")));
+    }
+
+    @Test
+    void whatTheMachineAsksForStillWinsWhenWeHaveIt() {
+        // The fallback must not have quietly become the answer for everyone.
+        assertEquals(Language.CATALAN, Language.of(Locale.of("ca", "ES")));
+        assertEquals(Language.ENGLISH, Language.of(Locale.UK));
     }
 }

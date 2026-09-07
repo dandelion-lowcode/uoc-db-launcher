@@ -62,7 +62,12 @@ public class Launcher {
     private static final int CONTENT_GAP = 10;
 
     public static void main(String[] args) {
-        Translations translations = new Translations(Locale.getDefault());
+        // Through the menu's own reading of the machine's language rather than straight
+        // from it, so that the window and the tick beside the language agree. Asked
+        // directly, a machine set to French would resolve to the bundle without a suffix,
+        // which is English, while the menu showed Spanish.
+        Translations translations = new Translations(
+                LanguageMenu.Language.of(Locale.getDefault()).locale());
         Preferences preferences = Preferences.userNodeForPackage(Launcher.class);
         ThemeManager themeManager = new ThemeManager(preferences);
         themeManager.applySavedTheme();
