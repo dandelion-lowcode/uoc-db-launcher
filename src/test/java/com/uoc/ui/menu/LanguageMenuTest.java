@@ -35,8 +35,7 @@ class LanguageMenuTest {
     @BeforeEach
     void aMenuOnAMachineNobodyHasChosenOn() throws Exception {
         machineLanguage = Locale.getDefault();
-        preferences = Preferences.userRoot().node("com/uoc/test/languageMenu");
-        preferences.clear();
+        preferences = Preferences.userRoot().node("uocdb-test-" + System.nanoTime());
         languages = new LanguageManager(preferences);
         translations = new Translations(Locale.ENGLISH);
     }

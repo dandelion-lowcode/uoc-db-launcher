@@ -32,8 +32,7 @@ class LanguageManagerTest {
 
     @BeforeEach
     void aMachineNobodyHasChosenOnYet() throws Exception {
-        preferences = Preferences.userRoot().node("com/uoc/test/language");
-        preferences.clear();
+        preferences = Preferences.userRoot().node("uocdb-test-" + System.nanoTime());
         languages = new LanguageManager(preferences);
     }
 
