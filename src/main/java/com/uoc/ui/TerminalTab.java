@@ -6,6 +6,7 @@ import com.formdev.flatlaf.util.UIScale;
 import com.jediterm.core.util.TermSize;
 import com.jediterm.terminal.ProcessTtyConnector;
 import com.jediterm.terminal.SubstringFinder;
+import com.jediterm.terminal.Terminal;
 import com.jediterm.terminal.TerminalColor;
 import com.jediterm.terminal.TextStyle;
 import com.jediterm.terminal.emulator.ColorPalette;
@@ -169,7 +170,13 @@ public class TerminalTab {
     }
 
     /**
-     * A line of the image being fetched.
+     * How the image being fetched is getting on: a line per layer, counting up.
+     *
+     * <p>
+     * Redrawn from the top of a cleared screen every time, which is what makes it a
+     * display rather than a transcript. The text is the whole picture as it now stands,
+     * not the news since last time, so appending it printed the entire block again on
+     * every one of the several hundred updates a download produces.
      *
      * <p>
      * Written into the terminal only while nothing is running in it. Text arriving from
@@ -177,15 +184,58 @@ public class TerminalTab {
      * and a client redrawing its prompt makes a mess of it.
      */
     public void showInstallProgress(String text) {
-        if (!isConnected()) {
-            write(text);
+        if (isConnected()) {
+            return;
+        }
+        Terminal screen = terminal.getTerminal();
+        screen.clearScreen();
+        screen.cursorPosition(1, 1);
+        writeLines(screen, text);
+    }
+
+    /**
+     * Writes text that has line breaks in it.
+     *
+     * <p>
+     * The breaks are asked for rather than written: writeCharacters puts characters into
+     * the screen where the cursor is, and a line feed among them is a character like any
+     * other rather than an instruction to move. Passed straight through, an eleven-line
+     * block arrived as one line, and everything past the eightieth column of it was off
+     * the edge of the screen.
+     */
+    private static void writeLines(Terminal screen, String text) {
+        String[] lines = text.split("\n", -1);
+        for (int i = 0; i < lines.length; i++) {
+            if (i > 0) {
+                screen.carriageReturn();
+                screen.newLine();
+            }
+            screen.writeCharacters(lines[i]);
         }
     }
 
-    /** The download is over, one way or the other. */
+    /** Everything on the screen as it now stands, which is what a test can read. */
+    String screenText() {
+        return terminal.getTerminalTextBuffer().getScreenLines();
+    }
+
+    /**
+     * The download is over, one way or the other.
+     *
+     * <p>
+     * A download that worked is finished business, and what comes next is the client's
+     * own prompt: it should open on a clear screen rather than under a list of layer
+     * ids. The cursor goes back to the top with it, or the prompt appears wherever the
+     * last line of the block happened to leave it, below a screenful of nothing.
+     *
+     * <p>
+     * A download that failed keeps what it printed, that being the only account of why.
+     */
     public void endInstallProgress(boolean succeeded) {
         if (succeeded) {
-            terminal.getTerminal().clearScreen();
+            Terminal screen = terminal.getTerminal();
+            screen.clearScreen();
+            screen.cursorPosition(1, 1);
         }
     }
 
@@ -306,7 +356,12 @@ public class TerminalTab {
     }
 
     private void write(String line) {
-        terminal.getTerminal().writeCharacters("\r\n" + line + "\r\n");
+        Terminal screen = terminal.getTerminal();
+        screen.carriageReturn();
+        screen.newLine();
+        writeLines(screen, line);
+        screen.carriageReturn();
+        screen.newLine();
     }
 
     /**

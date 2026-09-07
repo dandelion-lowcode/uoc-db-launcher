@@ -1,0 +1,80 @@
+ Image redis:8.10.1 Pulling 
+ b1de9b9d5a81 Pulling fs layer 0B
+ db0606565b61 Pulling fs layer 0B
+ 6310eb16bf42 Pulling fs layer 0B
+ 9b30195f536d Pulling fs layer 0B
+ 87650244ec3e Pulling fs layer 0B
+ 5b7942a2dab1 Pulling fs layer 0B
+ 4f4fb700ef54 Pulling fs layer 0B
+ 9b30195f536d Download complete 0B
+ b1de9b9d5a81 Download complete 0B
+ db0606565b61 Download complete 0B
+ 4f4fb700ef54 Download complete 0B
+ 6310eb16bf42 Downloading 3.146MB
+ 6310eb16bf42 Downloading 5.243MB
+ 6310eb16bf42 Downloading 7.34MB
+ 87650244ec3e Downloading 1.049MB
+ 5b7942a2dab1 Download complete 0B
+ 6310eb16bf42 Downloading 8.389MB
+ 87650244ec3e Downloading 2.097MB
+ 6310eb16bf42 Downloading 9.437MB
+ 87650244ec3e Downloading 3.146MB
+ 6310eb16bf42 Downloading 11.53MB
+ 87650244ec3e Downloading 5.243MB
+ 6310eb16bf42 Downloading 12.58MB
+ 87650244ec3e Downloading 7.34MB
+ 6310eb16bf42 Downloading 14.68MB
+ 87650244ec3e Downloading 8.389MB
+ 6310eb16bf42 Downloading 16.78MB
+ 87650244ec3e Downloading 10.49MB
+ 6310eb16bf42 Downloading 17.83MB
+ 87650244ec3e Downloading 11.53MB
+ 87650244ec3e Downloading 13.63MB
+ 6310eb16bf42 Downloading 19.92MB
+ 87650244ec3e Downloading 14.68MB
+ 6310eb16bf42 Downloading 20.97MB
+ 6310eb16bf42 Downloading 23.07MB
+ 87650244ec3e Downloading 16.78MB
+ 6310eb16bf42 Downloading 24.12MB
+ 87650244ec3e Downloading 17.83MB
+ 6310eb16bf42 Downloading 26.21MB
+ 87650244ec3e Downloading 19.92MB
+ 87650244ec3e Downloading 20.97MB
+ 6310eb16bf42 Downloading 27.26MB
+ fce2fbb27b14 Downloading 1.049MB
+ 6310eb16bf42 Downloading 28.31MB
+ 87650244ec3e Downloading 20.97MB
+ 87650244ec3e Downloading 22.02MB
+ fce2fbb27b14 Downloading 1.98MB
+ 6310eb16bf42 Downloading 29.79MB
+ bc63621f6444 Download complete 0B
+ fce2fbb27b14 Download complete 0B
+ 6310eb16bf42 Download complete 0B
+ 87650244ec3e Downloading 24.12MB
+ 6310eb16bf42 Extracting 1B
+ 87650244ec3e Downloading 25.64MB
+ 6310eb16bf42 Extracting 1B
+ 87650244ec3e Download complete 0B
+ 6310eb16bf42 Extracting 1B
+ 6310eb16bf42 Extracting 1B
+ 6310eb16bf42 Extracting 1B
+ 6310eb16bf42 Extracting 1B
+ 6310eb16bf42 Extracting 1B
+ 6310eb16bf42 Extracting 1B
+ 6310eb16bf42 Pull complete 0B
+ 9b30195f536d Pull complete 0B
+ db0606565b61 Pull complete 0B
+ 87650244ec3e Extracting 1B
+ 87650244ec3e Extracting 1B
+ 87650244ec3e Extracting 1B
+ 87650244ec3e Extracting 1B
+ 87650244ec3e Pull complete 0B
+ b1de9b9d5a81 Pull complete 0B
+ b1de9b9d5a81 Pull complete 0B
+ 4f4fb700ef54 Pull complete 0B
+ 5b7942a2dab1 Pull complete 0B
+ Image redis:8.10.1 Pulled 
+ Container uocdb-redis Creating 
+ Container uocdb-redis Created 
+ Container uocdb-redis Starting 
+ Container uocdb-redis Started 
