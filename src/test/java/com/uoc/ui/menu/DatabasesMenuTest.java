@@ -44,7 +44,8 @@ class DatabasesMenuTest {
             tabs = new DatabaseTabs(List.of(Database.values()),
                     translations, () -> {
                     });
-            menu = DatabasesMenu.build(tabs, started::add, stopped::add, translations);
+            menu = DatabasesMenu.build(tabs, started::add, stopped::add,
+                    database -> true, translations);
         });
     }
 

@@ -79,6 +79,8 @@ public enum Message {
     BUTTON_OPEN_NEO4J_BROWSER("button.open.neo4jBrowser"),
     BUTTON_OPEN_STUDIO3T("button.open.studio3t"),
     LABEL_STUDIO3T_DOWNLOAD("label.studio3t.download"),
+    DIALOG_UNINSTALL_TITLE("dialog.uninstall.title"),
+    DIALOG_UNINSTALL_MESSAGE("dialog.uninstall.message"),
     TOOLTIP_START("tooltip.start"),
     TOOLTIP_STOP("tooltip.stop"),
     DIALOG_DOCKER_MISSING_TITLE("dialog.dockerMissing.title"),

@@ -200,7 +200,8 @@ public class Launcher {
         // disk back as well as stopping it. The button beside the service only stops it:
         // that one keeps their place, and coming back to it should not be a download.
         var servicesMenu = DatabasesMenu.build(tabs, dockerManager::start,
-                dockerManager::stopAndDiscardImage, translations);
+                dockerManager::stopAndDiscardImage,
+                database -> confirmUninstall(frame, database, translations), translations);
         menuBar.add(servicesMenu);
         menuBar.add(ZoomMenu.build(frame, preferences, translations, tabs::applyZoom));
         // The indicators take their colours from the theme's palette, so the panel has
@@ -235,6 +236,29 @@ public class Launcher {
         contentPane.add(tabbedPane, BorderLayout.CENTER);
         contentPane.add(rightPanel, BorderLayout.EAST);
         return contentPane;
+    }
+
+    /**
+     * Asks before putting a service away, because putting it away is not undoable.
+     *
+     * <p>
+     * Unticking stops the service, removes its container and removes its image. The
+     * image is the part worth asking about: choosing the service again is a fresh
+     * download, and the Twitter graph is half a gigabyte of it. Everything the container
+     * was holding goes too, which for a student who has spent an evening loading data is
+     * the whole evening.
+     *
+     * @return whether the student said yes. Anything else -- No, Escape, closing the
+     *         dialog -- leaves the service exactly as it was.
+     */
+    private static boolean confirmUninstall(JFrame frame, Database database,
+            Translations translations) {
+        int answer = javax.swing.JOptionPane.showConfirmDialog(frame,
+                translations.format(Message.DIALOG_UNINSTALL_MESSAGE, database.displayName()),
+                translations.get(Message.DIALOG_UNINSTALL_TITLE),
+                javax.swing.JOptionPane.YES_NO_OPTION,
+                javax.swing.JOptionPane.WARNING_MESSAGE);
+        return answer == javax.swing.JOptionPane.YES_OPTION;
     }
 
     /**

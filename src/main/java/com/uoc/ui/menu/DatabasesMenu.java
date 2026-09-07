@@ -17,8 +17,16 @@ public class DatabasesMenu {
     private DatabasesMenu() {
     }
 
+    /**
+     * @param onStop         what unticking does. It stops the service and gives back the
+     *                       disk its image was using, which is why it is asked about
+     *                       first.
+     * @param confirmRemoval answers whether the student really means it. Passed in rather
+     *                       than opened here so that a test can answer without a dialog
+     *                       standing in front of it for ever.
+     */
     public static JMenu build(DatabaseTabs tabs, Consumer<String> onStart, Consumer<String> onStop,
-            Translations translations) {
+            java.util.function.Predicate<Database> confirmRemoval, Translations translations) {
         JMenu menu = new JMenu();
         Map<Database, JCheckBoxMenuItem> items = new EnumMap<>(Database.class);
 
@@ -42,9 +50,14 @@ public class DatabasesMenu {
                     // open makes the menu look as though it did nothing.
                     tabs.reveal(database);
                     onStart.accept(database.key());
-                } else {
+                } else if (confirmRemoval.test(database)) {
                     tabs.hide(database);
                     onStop.accept(database.key());
+                } else {
+                    // Put the tick back. The item selects itself the moment it is
+                    // clicked, so saying no here has to undo that, or the menu would
+                    // disagree with a service that is still there.
+                    item.setSelected(true);
                 }
             });
             menu.add(item);
