@@ -36,14 +36,23 @@ public class ImageAvailability {
      *         reported as a start is the harmless way to be wrong.
      */
     public boolean mustBeInstalled(String key) {
-        String image = imageFor(key);
-        if (image == null) {
+        try {
+            String image = imageFor(key);
+            if (image == null) {
+                return false;
+            }
+            // "image inspect" fails precisely when the image is not held locally, which
+            // is the question being asked. It never reaches the network.
+            return processRunner.run(
+                    List.of(DockerCommand.EXECUTABLE, "image", "inspect", image), null).failed();
+        } catch (Exception e) {
+            // Docker gone from the machine altogether answers by throwing rather than
+            // with an exit code, and this is only asked on the way to a command that
+            // reports its own failure. Thrown from here instead, it left the start
+            // silently abandoned: no install, no failure, and a service that stayed
+            // greyed out with nothing said.
             return false;
         }
-        // "image inspect" fails precisely when the image is not held locally, which is
-        // the question being asked. It never reaches the network.
-        return processRunner.run(
-                List.of(DockerCommand.EXECUTABLE, "image", "inspect", image), null).failed();
     }
 
     private String imageFor(String key) {

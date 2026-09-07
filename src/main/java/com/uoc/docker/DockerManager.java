@@ -181,7 +181,10 @@ public class DockerManager {
 
     public void refreshStatus(String key) {
         reporter.watch(key);
-        executor.submit(() -> reconcileStatus(key));
+        // Through submit rather than straight at the pool: a refresh asked for while the
+        // launcher is closing threw RejectedExecutionException at whoever asked, and the
+        // asking is done on the interface thread.
+        submit(() -> reconcileStatus(key));
     }
 
     public void start(String key) {

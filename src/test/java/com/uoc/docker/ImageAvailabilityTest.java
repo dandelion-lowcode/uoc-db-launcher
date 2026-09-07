@@ -111,6 +111,30 @@ class ImageAvailabilityTest {
     }
 
     @Test
+    void aServiceComposeNamesNoImageForIsNotAnInstall() {
+        // A service defined only with a build context answers with a blank line. There is
+        // nothing to inspect, and claiming an install would leave the panel saying so
+        // until the service came up.
+        ImageAvailability nameless = new ImageAvailability(
+                (command, stdin) -> new ProcessRunner.Result(0, "\n   \n"),
+                java.nio.file.Path.of("docker-compose.yml"));
+
+        assertThat(nameless.mustBeInstalled("riak")).isFalse();
+    }
+
+    @Test
+    void aDockerThatCannotBeRunAtAllIsNotAnInstallEither() {
+        // Docker uninstalled while the launcher was open: the runner throws rather than
+        // failing. Thrown on from here it abandoned the start that was about to happen,
+        // silently, so the student saw nothing at all.
+        ImageAvailability broken = new ImageAvailability((command, stdin) -> {
+            throw new IllegalStateException("Cannot run program \"docker\"");
+        }, java.nio.file.Path.of("docker-compose.yml"));
+
+        assertThat(broken.mustBeInstalled("mongo")).isFalse();
+    }
+
+    @Test
     void theCheckNeverReachesTheNetwork() {
         // "image inspect" answers from what is on the machine. Anything that could pull
         // would turn a question into the very download it is asking about.
