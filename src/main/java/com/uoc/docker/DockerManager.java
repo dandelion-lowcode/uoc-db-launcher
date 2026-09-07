@@ -98,6 +98,14 @@ public class DockerManager {
     /** The docker events process, for as long as there is one to end. */
     private volatile ProcessRunner.LiveProcess events;
 
+    /**
+     * Services whose image is to go once they have stopped. Set before the stop is asked
+     * for and read after it has finished, because an image cannot be removed while a
+     * container is still using it.
+     */
+    private final java.util.Set<String> discarding =
+            java.util.concurrent.ConcurrentHashMap.newKeySet();
+
     private volatile boolean closed;
 
     public DockerManager() {
@@ -196,6 +204,24 @@ public class DockerManager {
     }
 
     /**
+     * Stops a service and gives back the disk it was using.
+     *
+     * <p>
+     * What a student puts away, they have said they are finished with, and eleven images
+     * is a good many gigabytes on a laptop that has to hold a course's worth of other
+     * things too. The container goes and so does the image.
+     *
+     * <p>
+     * The cost is on the way back: choosing it again is a fresh download, and the Twitter
+     * graph is half a gigabyte of it. That is why this is only what unticking does, and
+     * why the stop button beside a service leaves everything where it is.
+     */
+    public void stopAndDiscardImage(String key) {
+        discarding.add(key);
+        request(key, ServiceAction.STOP);
+    }
+
+    /**
      * Takes charge of a service, or remembers what was asked for until it can.
      *
      * <p>
@@ -257,6 +283,9 @@ public class DockerManager {
                     runCommand(key, waiting, COMPOSE_UP, COMPOSE_DETACHED);
                 } else {
                     runCommand(key, Phase.STOPPING, COMPOSE_STOP);
+                    if (discarding.remove(key)) {
+                        freeTheDiskSpace(key);
+                    }
                 }
             } finally {
                 finished(key);
@@ -319,6 +348,33 @@ public class DockerManager {
             reconcileStatus(key);
         } finally {
             reporter.enterPhase(key, Phase.IDLE);
+        }
+    }
+
+    /**
+     * Removes a stopped service's container and the image behind it.
+     *
+     * <p>
+     * In that order, and only once the stop has finished: Docker refuses to remove an
+     * image any container still refers to, stopped ones included.
+     *
+     * <p>
+     * Nothing here is reported. Giving back disk is a courtesy, and the service is
+     * stopped either way -- an image shared with another service, or already gone, or a
+     * daemon that has since disappeared, are all failures the student can do nothing
+     * about and would not know what to make of.
+     */
+    private void freeTheDiskSpace(String key) {
+        try {
+            runCompose(key, Phase.STOPPING, "rm", "-f");
+
+            String image = images.imageFor(key);
+            if (image != null) {
+                processRunner.run(
+                        List.of(DockerCommand.EXECUTABLE, "image", "rm", image), null);
+            }
+        } catch (Exception e) {
+            // See above: there is nothing worth saying and nothing to be done.
         }
     }
 

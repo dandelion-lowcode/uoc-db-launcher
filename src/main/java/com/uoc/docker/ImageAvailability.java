@@ -55,7 +55,8 @@ public class ImageAvailability {
         }
     }
 
-    private String imageFor(String key) {
+    /** The image a service runs, or null when compose names none. */
+    String imageFor(String key) {
         ProcessRunner.Result result = processRunner.run(List.of(
                 DockerCommand.EXECUTABLE, DockerCommand.COMPOSE,
                 "-f", composeFile.toString(), "config", "--images", key), null);
