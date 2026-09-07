@@ -264,6 +264,21 @@ class SystemProcessRunnerTest {
         }
     }
 
+    @Test
+    void aCommandThatCannotBeRunSaysSoWhenItsLinesAreFollowedToo() {
+        // The install goes through this overload, and a Docker that has been uninstalled
+        // has to arrive as a result the manager can report rather than as an exception
+        // thrown at a worker nobody is watching.
+        java.util.List<String> lines = new java.util.ArrayList<>();
+
+        ProcessRunner.Result result = new SystemProcessRunner()
+                .run(List.of("uocdb-no-such-program"), null, lines::add);
+
+        assertThat(result.failed()).isTrue();
+        assertThat(result.output()).isNotBlank();
+        assertThat(lines).isEmpty();
+    }
+
     private static String sourceFile(String program, String name) throws java.io.IOException {
         Path file = java.nio.file.Files.createTempDirectory("uocdb-test").resolve(name + ".java");
         java.nio.file.Files.writeString(file, program);

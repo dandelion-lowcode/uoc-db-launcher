@@ -27,7 +27,6 @@ import com.formdev.flatlaf.extras.FlatSVGIcon;
 import com.uoc.docker.Database;
 import com.uoc.docker.DockerAvailability;
 import com.uoc.docker.DockerManager;
-import com.uoc.docker.QueryRunner;
 import com.uoc.docker.ServiceStatus;
 import com.uoc.i18n.Message;
 import com.uoc.i18n.Translations;
@@ -63,7 +62,12 @@ public class Launcher {
     private static final int CONTENT_GAP = 10;
 
     public static void main(String[] args) {
-        Translations translations = new Translations(Locale.getDefault());
+        // Through the menu's own reading of the machine's language rather than straight
+        // from it, so that the window and the tick beside the language agree. Asked
+        // directly, a machine set to French would resolve to the bundle without a suffix,
+        // which is English, while the menu showed Spanish.
+        Translations translations = new Translations(
+                LanguageMenu.Language.of(Locale.getDefault()).locale());
         Preferences preferences = Preferences.userNodeForPackage(Launcher.class);
         ThemeManager themeManager = new ThemeManager(preferences);
         themeManager.applySavedTheme();
@@ -85,7 +89,7 @@ public class Launcher {
         translations.register(() -> frame.setTitle(translations.get(Message.APP_TITLE)));
 
         List<Database> databases = List.of(Database.values());
-        DatabaseTabs tabs = new DatabaseTabs(databases, new QueryRunner(), translations,
+        DatabaseTabs tabs = new DatabaseTabs(databases, translations,
                 () -> openJupyter(translations), preferences);
 
         DockerManager dockerManager = new DockerManager().start();

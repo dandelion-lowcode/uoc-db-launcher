@@ -6,26 +6,33 @@ course used to hand out: a student installs Docker Desktop, unzips this, and cli
 
 Eleven services: MongoDB, Cassandra, Neo4j, a second Neo4j carrying the Twitter graph,
 Redis, Riak, CockroachDB, Vertica, ArangoDB with the IMDB graph, Elasticsearch, and a
-Jupyter notebook server. Each console speaks the language that database is driven with --
-`mongosh`, `cqlsh`, Cypher, `redis-cli`, HTTP requests, SQL, AQL -- and an empty one shows
-a worked example of it.
+Jupyter notebook server.
+
+Each tab holds the database's own client, running inside its container in a real
+terminal: `mongosh`, `cqlsh`, `cypher-shell`, `redis-cli`, `cockroach sql`, `vsql`,
+`arangosh`, and a shell for the two the course drives over HTTP. Its prompt, its history,
+its completion and its colours are the client's own, because it is the client -- there is
+a pseudo terminal between it and the window rather than a box that sends one line at a
+time. That was the earlier arrangement, and it ran a fresh process per query: a variable
+set in `mongosh` was gone by the next line, and `\h` in `vsql` hung the launcher, because
+it pages its help through `--More--` and nothing on this side could press a key.
 
 ## Running it while working on it
 
     mvn compile exec:java
 
 Docker Desktop has to be running; nothing else is needed. Services are started from the
-**Services** menu and their images are downloaded the first time, which the trace box
-reports as it happens.
+**Services** menu and their images are downloaded the first time, which the terminal
+reports as it happens, until the client itself has it.
 
 ## The tests
 
     mvn test                        # everything that needs no containers, about a minute
     mvn test -Dexcluded.groups=     # every test, driving real containers
 
-The second one starts each database in turn and asks it the questions the consoles
-promise, so it needs a Docker daemon and pulls several gigabytes the first time. Both run
-in CI: the first on every push, the second on a tag or on request.
+The second one starts each database in turn and drives it, so it needs a Docker daemon and
+pulls several gigabytes the first time. Both run in CI: the first on every push, the
+second on a tag or on request.
 
 ## Releasing
 
@@ -47,14 +54,13 @@ student needs no JDK.
     src/main/java/com/uoc/
         docker/          Talking to Docker: the compose commands, and the state machine
                          that decides what a service is doing from what Docker reports
-        docker/client/   One class per console: the command each database is queried with
-        ui/              The window: the tabs, the consoles, the services panel
-        ansi/            Colouring what a client prints, from the theme's own palette
+        ui/              The window: the tabs, the terminals, the services panel
+        ansi/            The sixteen colours a client asks for, read from the theme
         i18n/            Catalan, Spanish and English, switchable while running
         platform/        The three questions the operating system answers differently
     src/main/resources/
         docker/          docker-compose.yml, the one definition of every service
-        i18n/            The translations, and the worked example each console shows
+        i18n/            The translations
         themes/          The FlatLaf palettes, ANSI colours included
         notebooks/       What Jupyter opens
         icons/           One per service, plus the application's own
@@ -104,5 +110,7 @@ that day takes minutes rather than a term.
 The application unpacks the compose file and the notebooks into the user's own data
 directory, because an installed copy sits somewhere it may not write to. Which directory
 that is, and how the system's dark mode and its notion of a menu shortcut are found, is
-all in `com.uoc.platform`. Preferences -- theme, language, zoom, console font, and which
-services a student had open -- go through `java.util.prefs`.
+all in `com.uoc.platform`. Preferences -- theme, zoom, console font, and which services a
+student had open -- go through `java.util.prefs`. The language is not among them: it
+starts from the machine's own, or in Spanish when that is a language the launcher has no
+bundle for, and a choice made from the menu lasts as long as the window does.

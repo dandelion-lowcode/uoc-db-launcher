@@ -124,9 +124,4 @@ abstract class DockerIntegrationTestBase {
             throw new IllegalStateException(e);
         }
     }
-
-    /** Runs a query the way the application does, through the real process runner. */
-    protected static String query(Database database, String query) {
-        return new QueryRunner().execute(database.key(), query);
-    }
 }

@@ -13,8 +13,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.uoc.docker.Database;
-import com.uoc.docker.ProcessRunner;
-import com.uoc.docker.QueryRunner;
 import com.uoc.i18n.Translations;
 
 /**
@@ -47,11 +45,9 @@ class RememberedSettingsTest {
     }
 
     private DatabaseTabs tabsUsing(Preferences preferences) throws Exception {
-        ProcessRunner fake = (command, stdin) -> new ProcessRunner.Result(0, "");
         DatabaseTabs[] built = new DatabaseTabs[1];
         SwingUtilities.invokeAndWait(() -> built[0] = new DatabaseTabs(
-                List.of(Database.values()), new QueryRunner(fake),
-                new Translations(Locale.ENGLISH), () -> {
+                List.of(Database.values()), new Translations(Locale.ENGLISH), () -> {
                 }, preferences));
         return built[0];
     }

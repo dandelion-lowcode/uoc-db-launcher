@@ -123,6 +123,16 @@ class BundledFilesTest {
     }
 
     @Test
+    void theOneTheApplicationUsesUnpacksIntoThisSystemsOwnDirectory() {
+        // Nothing is written here: an installed copy sits somewhere it may not write to,
+        // which is the whole reason this class exists, and where that is is the platform's
+        // answer rather than this one's.
+        assertThat(BundledFiles.inUserDataDirectory().composeFile())
+                .startsWithRaw(com.uoc.platform.UserDataDirectory.current())
+                .isAbsolute();
+    }
+
+    @Test
     void theUnpackedComposeFileIsSomethingDockerCanActuallyRead() throws IOException {
         Path composeFile = new BundledFiles(root).install();
 

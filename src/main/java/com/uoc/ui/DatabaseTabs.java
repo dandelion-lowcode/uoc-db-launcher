@@ -1,6 +1,5 @@
 package com.uoc.ui;
 
-import java.awt.Component;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -14,7 +13,6 @@ import javax.swing.SwingUtilities;
 import com.formdev.flatlaf.FlatClientProperties;
 import com.formdev.flatlaf.extras.FlatSVGIcon;
 import com.uoc.docker.Database;
-import com.uoc.docker.QueryRunner;
 import com.uoc.i18n.Translations;
 
 /**
@@ -34,7 +32,10 @@ public class DatabaseTabs {
         void onVisibilityChanged(Database database, boolean shown);
     }
 
-    /** The longer side of a tab's icon. The label beside it is what names the service. */
+    /**
+     * The longer side of a tab's icon. The label beside it is what names the
+     * service.
+     */
     private static final int TAB_ICON_SIZE = 24;
     private static final String SHOWN_PREF_KEY = "shownServices";
 
@@ -45,7 +46,7 @@ public class DatabaseTabs {
     // apart is what lets Jupyter sit among the tabs without every console operation
     // having to ask whether this one can be typed at.
     private final Map<Database, JPanel> panels = new LinkedHashMap<>();
-    private final Map<Database, DatabaseTab> tabs = new LinkedHashMap<>();
+    private final Map<Database, TerminalTab> tabs = new LinkedHashMap<>();
     private final Map<Database, FlatSVGIcon> icons = new LinkedHashMap<>();
     private final JTabbedPane tabbedPane = new JTabbedPane();
     private final List<VisibilityListener> visibilityListeners = new ArrayList<>();
@@ -66,9 +67,9 @@ public class DatabaseTabs {
      *                        is
      *                        put in step with the launcher's first.
      */
-    public DatabaseTabs(List<Database> databases, QueryRunner queryRunner,
-            Translations translations, Runnable onOpenNotebooks) {
-        this(databases, queryRunner, translations, onOpenNotebooks, null);
+    public DatabaseTabs(List<Database> databases, Translations translations,
+            Runnable onOpenNotebooks) {
+        this(databases, translations, onOpenNotebooks, null);
     }
 
     /**
@@ -77,9 +78,8 @@ public class DatabaseTabs {
      *                    {@code null} to remember nothing, which is what the tests
      *                    want
      */
-    public DatabaseTabs(List<Database> databases, QueryRunner queryRunner,
-            Translations translations, Runnable onOpenNotebooks,
-            java.util.prefs.Preferences preferences) {
+    public DatabaseTabs(List<Database> databases, Translations translations,
+            Runnable onOpenNotebooks, java.util.prefs.Preferences preferences) {
         this.databases = databases;
         this.preferences = preferences;
 
@@ -90,8 +90,7 @@ public class DatabaseTabs {
 
         for (Database database : databases) {
             if (database.hasQueryConsole()) {
-                DatabaseTab tab = new DatabaseTab(database, queryRunner);
-                tab.registerTranslations(translations);
+                TerminalTab tab = new TerminalTab(database, translations);
                 tabs.put(database, tab);
                 panels.put(database, tab.getPanel());
             } else {
@@ -106,15 +105,6 @@ public class DatabaseTabs {
 
         layOutTabsInOneRow();
 
-        tabbedPane.addChangeListener(e -> {
-            Component selected = tabbedPane.getSelectedComponent();
-            for (DatabaseTab tab : tabs.values()) {
-                if (tab.getPanel() == selected) {
-                    tab.focusInput();
-                    break;
-                }
-            }
-        });
     }
 
     /**
@@ -122,14 +112,19 @@ public class DatabaseTabs {
      *
      * <p>
      * Wrapped onto a second row, which is what Swing does by default, the rows swap
-     * places as a tab is picked: the one a student just clicked jumps to the bottom and
-     * everything else moves with it, so the tab they want next is never twice in the same
+     * places as a tab is picked: the one a student just clicked jumps to the bottom
+     * and
+     * everything else moves with it, so the tab they want next is never twice in
+     * the same
      * place.
      *
      * <p>
-     * The buttons at both ends, rather than a pair at one end, because that is where a
-     * student looks for what is off the edge on that side. One button per end, and only
-     * while there is something to scroll to. No menu of the hidden tabs: what is hidden
+     * The buttons at both ends, rather than a pair at one end, because that is
+     * where a
+     * student looks for what is off the edge on that side. One button per end, and
+     * only
+     * while there is something to scroll to. No menu of the hidden tabs: what is
+     * hidden
      * is a scroll away, and the same list is in the Services menu already.
      */
     private void layOutTabsInOneRow() {
@@ -146,10 +141,13 @@ public class DatabaseTabs {
      * A service's icon at tab size, with the shape it was drawn in.
      *
      * <p>
-     * Asking FlatSVGIcon for a square icon does not fit the drawing into a square: it
+     * Asking FlatSVGIcon for a square icon does not fit the drawing into a square:
+     * it
      * scales width and height separately, so anything that is not square arrives
-     * stretched. Vertica's logo is five times as wide as it is tall and was reaching the
-     * tab as a blot. Here the longer side is what gets the tab size, and the shorter one
+     * stretched. Vertica's logo is five times as wide as it is tall and was
+     * reaching the
+     * tab as a blot. Here the longer side is what gets the tab size, and the
+     * shorter one
      * follows from the drawing's own proportions.
      */
     static FlatSVGIcon tabIcon(Database database) {
@@ -162,7 +160,9 @@ public class DatabaseTabs {
         return new FlatSVGIcon(database.iconResource(), width, height);
     }
 
-    /** Never rounded away to nothing: a very long, very thin drawing is still drawn. */
+    /**
+     * Never rounded away to nothing: a very long, very thin drawing is still drawn.
+     */
     private static int scaled(double side) {
         return Math.max(1, (int) Math.round(side));
     }
@@ -185,7 +185,7 @@ public class DatabaseTabs {
      * the
      * two methods below, which already know what to do when there is no console.
      */
-    public DatabaseTab tabFor(String key) {
+    public TerminalTab tabFor(String key) {
         return tabs.get(Database.fromKey(key));
     }
 
@@ -199,9 +199,9 @@ public class DatabaseTabs {
      * site, which is how the first version of this went wrong.
      */
     public void setSendEnabled(String key, boolean enabled) {
-        DatabaseTab tab = tabFor(key);
+        TerminalTab tab = tabFor(key);
         if (tab != null) {
-            tab.setSendEnabled(enabled);
+            tab.setReady(enabled);
         }
     }
 
@@ -214,7 +214,7 @@ public class DatabaseTabs {
      * still turns to show something went wrong.
      */
     public void showFailure(String key, String details) {
-        DatabaseTab tab = tabFor(key);
+        TerminalTab tab = tabFor(key);
         if (tab != null) {
             tab.showFailure(details);
         }
@@ -224,7 +224,7 @@ public class DatabaseTabs {
      * Shows how an install is going in the trace, rewriting it as the news arrives.
      */
     public void showInstallProgress(String key, String text) {
-        DatabaseTab tab = tabFor(key);
+        TerminalTab tab = tabFor(key);
         if (tab != null) {
             tab.showInstallProgress(text);
         }
@@ -233,19 +233,21 @@ public class DatabaseTabs {
     /**
      * The install is over, so the box for typing queries comes back.
      *
-     * @param succeeded whether the service came up. When it did, the trace is cleared:
-     *                  what the install printed is finished business. When it did not, it
+     * @param succeeded whether the service came up. When it did, the trace is
+     *                  cleared:
+     *                  what the install printed is finished business. When it did
+     *                  not, it
      *                  is kept, being the only account of why.
      */
     public void endInstallProgress(String key, boolean succeeded) {
-        DatabaseTab tab = tabFor(key);
+        TerminalTab tab = tabFor(key);
         if (tab != null) {
             tab.endInstallProgress(succeeded);
         }
     }
 
     public void applyThemeColors() {
-        tabs.values().forEach(DatabaseTab::applyThemeColors);
+        tabs.values().forEach(TerminalTab::applyThemeColors);
 
         // Hiding a tab takes its panel out of the tabbed pane altogether, so it belongs
         // to no window. What repaints a theme change walks the windows that are
@@ -255,7 +257,7 @@ public class DatabaseTabs {
         // comes back wrong: light panels in a dark window. Each one is refreshed here
         // by
         // name, since nothing else will reach it.
-        for (Map.Entry<Database, JPanel> entry : panels.entrySet()) {
+        for (var entry : panels.entrySet()) {
             if (!isShown(entry.getKey())) {
                 SwingUtilities.updateComponentTreeUI(entry.getValue());
             }
@@ -266,7 +268,7 @@ public class DatabaseTabs {
      * Redraws every console at the current zoom, including the tabs not on screen.
      */
     public void applyZoom() {
-        tabs.values().forEach(DatabaseTab::applyZoom);
+        tabs.values().forEach(TerminalTab::applyZoom);
     }
 
     /** Redraws every console in another font, including the tabs not on screen. */
