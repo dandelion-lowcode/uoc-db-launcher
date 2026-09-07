@@ -29,7 +29,14 @@
       * Haz doble clic en `UOCDBLauncher.app` o ejecuta `open UOCDBLauncher.app` desde la terminal.
 
     Si tienes **Linux**...
-      * Abre una terminal en la carpeta `UOCDBLauncher` que has descomprimido y ejecuta `./bin/UOCDBLauncher`.
+      * Abre una terminal en la carpeta `UOCDBLauncher` que has descomprimido y ejecuta:
+
+        ```shell
+        chmod +x bin/UOCDBLauncher
+        ./bin/UOCDBLauncher &
+        ```
+
+        El `chmod` solo debes hacerlo la primera vez.
 
 5. Selecciona tu **idioma** en el menú superior. Después, haz clic en **Tutorial** en el menú superior y sigue las instrucciones.
 
@@ -69,7 +76,14 @@
       * Feu doble clic a `UOCDBLauncher.app` o executeu `open UOCDBLauncher.app` des del terminal.
 
     Si teniu **Linux**...
-      * Obriu un terminal a la carpeta `UOCDBLauncher` que heu descomprimit i executeu `./bin/UOCDBLauncher`.
+      * Obriu un terminal a la carpeta `UOCDBLauncher` que heu descomprimit i executeu:
+
+        ```shell
+        chmod +x bin/UOCDBLauncher
+        ./bin/UOCDBLauncher &
+        ```
+
+        El `chmod` només l'heu de fer la primera vegada.
 
 5. Seleccioneu el vostre **idioma** al menú superior. Després, feu clic a **Tutorial** al menú superior i seguiu les instruccions.
 
