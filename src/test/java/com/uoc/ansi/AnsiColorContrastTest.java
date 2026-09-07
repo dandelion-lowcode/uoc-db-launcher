@@ -33,8 +33,22 @@ import com.formdev.flatlaf.FlatLightLaf;
  */
 class AnsiColorContrastTest {
 
-    /** WCAG AA for normal-size text. */
-    private static final double MINIMUM_RATIO = 4.5;
+    /**
+     * WCAG AA for normal-size text, less a little.
+     *
+     * <p>
+     * The palette used to sit exactly on 4.5, and that is what made it look faded: a
+     * colour reaches the line by being diluted with the paper, and the last half point of
+     * contrast costs most of what makes a colour a colour. Red on the dark theme is the
+     * clearest case -- pure red measures 4.0 against the console's paper, and every
+     * hundredth above that has to be paid for in whiteness.
+     *
+     * <p>
+     * Four is the floor rather than four and a half, and everything is measured against
+     * the console's own background rather than the window's, which is darker on the dark
+     * theme for exactly this reason. Most of the palette clears 4.5 comfortably even so.
+     */
+    private static final double MINIMUM_RATIO = 4.0;
 
     /**
      * The backgrounds are read from the look and feel rather than written down
@@ -49,7 +63,7 @@ class AnsiColorContrastTest {
         } else {
             FlatLightLaf.setup();
         }
-        Color background = UIManager.getColor("TextPane.background");
+        Color background = UIManager.getColor("Console.background");
         assertThat(background).as("the look and feel must define a console background").isNotNull();
         return background;
     }

@@ -109,7 +109,7 @@ class TerminalTabTest {
         var style = settings.getFoundPatternColor();
 
         assertThat(asAwt(style.getBackground())).isEqualTo(new ThemeAnsiColors().of(AnsiColor.YELLOW));
-        assertThat(asAwt(style.getForeground())).isEqualTo(UIManager.getColor("TextPane.background"));
+        assertThat(asAwt(style.getForeground())).isEqualTo(UIManager.getColor("Console.background"));
     }
 
     @Test

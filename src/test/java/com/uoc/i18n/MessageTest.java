@@ -31,6 +31,26 @@ class MessageTest {
     }
 
     @Test
+    void onlyTheTextsDrawnAsHtmlUseHtmlEscapes() {
+        // An escape is decoded by the HTML renderer and by nothing else, so a plain
+        // label or a button carrying one prints it exactly as written: a student saw
+        // "Copia la connexi&oacute;" on a button. Accented characters go in as
+        // themselves; the bundles are read as UTF-8.
+        for (Locale locale : LOCALES) {
+            Translations translations = new Translations(locale);
+            for (Message message : Message.values()) {
+                String text = translations.get(message);
+                if (text.startsWith("<html>")) {
+                    continue;
+                }
+                assertTrue(!text.matches("(?s).*&[a-zA-Z]+;.*"),
+                        message.key() + " in " + locale + " is not drawn as HTML, so \""
+                                + text + "\" would show its escapes to the student");
+            }
+        }
+    }
+
+    @Test
     void noLanguageLeavesATextEmpty() {
         for (Locale locale : LOCALES) {
             Translations translations = new Translations(locale);

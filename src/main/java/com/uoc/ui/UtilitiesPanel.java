@@ -1,6 +1,9 @@
 package com.uoc.ui;
 
 import java.awt.Dimension;
+import java.awt.Toolkit;
+import java.awt.datatransfer.StringSelection;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -49,33 +52,21 @@ public class UtilitiesPanel {
     /**
      * Another way of getting at one database, and what to call it.
      *
-     * @param url  what the button opens. Every service publishes its ports on this
-     *             machine, so these all answer on localhost.
-     * @param note a line under the button, or {@code null} for none. It takes the address
-     *             below as its one argument, so the link is written once here rather than
-     *             three times in the translations.
+     * @param note    a line under the button, or {@code null} for none. It takes the
+     *                address below as its one argument, so the link is written once here
+     *                rather than three times in the translations.
+     * @param tooltip what the button will do, or {@code null} when the wording says it
+     * @param subject the address the tooltip is about
+     * @param open    what pressing it does
      */
-    private record Utility(Database database, String url, String icon, Message name,
-            Message note, String noteUrl) {
-
-        static Utility opening(Database database, String url, String icon, Message name) {
-            return new Utility(database, url, icon, name, null, null);
-        }
+    private record Utility(Database database, String icon, Message name,
+            Message note, String noteUrl, Message tooltip, String subject, Runnable open) {
     }
 
-    private static final List<Utility> KNOWN = List.of(
-            // The Twitter graph answers on a port of its own, the plain Neo4j having
-            // taken 7474 first.
-            Utility.opening(Database.NEO4J_TWITTER, "http://localhost:17474",
-                    "icons/neo4j-browser.svg", Message.BUTTON_OPEN_NEO4J_BROWSER),
+    /** Where MongoDB answers on this machine, which is what a client has to be told. */
+    private static final String MONGO_CONNECTION = "mongodb://localhost:27017";
 
-            // Studio 3T registers itself as the handler for mongodb:// addresses, so
-            // this opens it already pointed at the student's own database. A machine
-            // without it installed does nothing at all, which is what the line
-            // underneath is for.
-            new Utility(Database.MONGO, "mongodb://localhost:27017", "icons/studio3t.svg",
-                    Message.BUTTON_OPEN_STUDIO3T, Message.LABEL_STUDIO3T_DOWNLOAD,
-                    "https://robomongo.org/download.php"));
+    private final List<Utility> known;
 
     private final JPanel component = new JPanel();
     private final TitledBorder heading = BorderFactory.createTitledBorder("");
@@ -97,13 +88,31 @@ public class UtilitiesPanel {
 
         component.setLayout(new BoxLayout(component, BoxLayout.Y_AXIS));
 
-        for (Utility utility : KNOWN) {
+        known = new ArrayList<>();
+        // The Twitter graph answers on a port of its own, the plain Neo4j having taken
+        // 7474 first.
+        known.add(new Utility(Database.NEO4J_TWITTER, "icons/neo4j-browser.svg",
+                Message.BUTTON_OPEN_NEO4J_BROWSER, null, null, null, null,
+                () -> openInBrowser.accept("http://localhost:17474")));
+
+        // The address rather than the program. Starting Studio 3T from here would mean
+        // knowing where it is, and that is three operating systems, three editions and a
+        // vendor folder with a version in it -- a guess that breaks on the first machine
+        // that installed it anywhere else. The connection string is the one thing every
+        // MongoDB client asks for, and it is the same on every machine.
+        known.add(new Utility(Database.MONGO, "icons/studio3t.svg",
+                Message.BUTTON_COPY_CONNECTION, Message.LABEL_STUDIO3T_DOWNLOAD,
+                "https://robomongo.org/download.php",
+                Message.TOOLTIP_COPY_CONNECTION, MONGO_CONNECTION,
+                () -> copyToClipboard(MONGO_CONNECTION)));
+
+        for (Utility utility : known) {
             JButton button = new JButton();
             button.setName(utility.database().key());
             button.setIcon(new FlatSVGIcon(utility.icon(), ICON_SIZE, ICON_SIZE));
             button.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
             button.setMaximumSize(new Dimension(Integer.MAX_VALUE, BUTTON_HEIGHT));
-            button.addActionListener(event -> openInBrowser.accept(utility.url()));
+            button.addActionListener(event -> utility.open().run());
             buttons.put(utility, button);
 
             if (utility.note() != null) {
@@ -113,8 +122,13 @@ public class UtilitiesPanel {
 
         translations.register(() -> {
             heading.setTitle(" " + translations.get(Message.LABEL_UTILITIES) + " ");
-            buttons.forEach((utility, button) ->
-                    button.setText(translations.get(utility.name())));
+            buttons.forEach((utility, button) -> {
+                button.setText(translations.get(utility.name()));
+                if (utility.tooltip() != null) {
+                    button.setToolTipText(
+                            translations.format(utility.tooltip(), utility.subject()));
+                }
+            });
             notes.forEach((utility, note) -> ((JEditorPane) note)
                     .setText(translations.format(utility.note(), utility.noteUrl())));
             component.repaint();
@@ -146,6 +160,23 @@ public class UtilitiesPanel {
             }
         });
         return note;
+    }
+
+    /**
+     * Puts an address where the next paste will find it.
+     *
+     * <p>
+     * A clipboard belongs to the desktop rather than to us, and a desktop that will not
+     * give it up -- another application holding it, or none at all -- is not something a
+     * student did or can undo.
+     */
+    private static void copyToClipboard(String text) {
+        try {
+            Toolkit.getDefaultToolkit().getSystemClipboard()
+                    .setContents(new StringSelection(text), null);
+        } catch (Exception ignored) {
+            // Nothing useful to say: the address is on the button's own tooltip.
+        }
     }
 
     public JPanel getComponent() {

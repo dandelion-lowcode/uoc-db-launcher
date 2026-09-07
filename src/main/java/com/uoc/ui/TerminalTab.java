@@ -109,6 +109,13 @@ public class TerminalTab {
     /** The size the interface is drawn at, before the screen scales it. */
     private static final int CONSOLE_FONT_SIZE = 12;
 
+    /**
+     * The theme key for the paper the console is printed on, which is its own rather
+     * than the one every other text pane uses: on the dark theme it is darker than the
+     * window, because that is the room the palette needs to be intense.
+     */
+    private static final String CONSOLE_BACKGROUND = "Console.background";
+
     private final Database database;
     private final JPanel panel = new JPanel(new BorderLayout());
     private final ConsoleLikeSettings settings;
@@ -140,6 +147,9 @@ public class TerminalTab {
 
     private final Translations translations;
     private int dots;
+
+    /** Whether what is on screen is a download's progress and nobody else's. */
+    private boolean showingInstall;
     private final javax.swing.Timer loading = new javax.swing.Timer(DOT_MILLIS, event -> {
         dots = (dots + 1) % (MAX_DOTS + 1);
         drawLoading();
@@ -212,13 +222,7 @@ public class TerminalTab {
      * the three. Only the first said anything.
      */
     public void updateStatus(ServiceStatus status) {
-        if (status == ServiceStatus.HEALTHY) {
-            boolean wasWaiting = loading.isRunning();
-            stopLoading();
-            if (wasWaiting && !isConnected()) {
-                announceReady();
-            }
-        } else if (status == ServiceStatus.STARTING || status == ServiceStatus.RUNNING) {
+        if (status == ServiceStatus.STARTING || status == ServiceStatus.RUNNING) {
             startLoading();
         } else {
             stopLoading();
@@ -248,32 +252,9 @@ public class TerminalTab {
         Terminal screen = terminal.getTerminal();
         screen.clearScreen();
         screen.cursorPosition(1, 1);
+        screen.characterAttributes(settings.styleOf(ServiceStatus.STARTING));
         screen.writeCharacters(translations.get(Message.CONSOLE_LOADING) + ".".repeat(dots));
-    }
-
-    /**
-     * Says the database is answering, and leaves the client's own prompt to follow.
-     *
-     * <p>
-     * In the theme's green, which is the one colour here that means a thing has
-     * gone
-     * right, and with a blank line after it so the prompt that follows does not
-     * read as
-     * part of the sentence.
-     */
-    private void announceReady() {
-        Terminal screen = terminal.getTerminal();
-        screen.clearScreen();
-        screen.cursorPosition(1, 1);
-
-        screen.characterAttributes(settings.goodNewsStyle());
-        screen.writeCharacters(translations.get(Message.CONSOLE_READY));
         screen.characterAttributes(settings.getDefaultStyle());
-
-        screen.carriageReturn();
-        screen.newLine();
-        screen.carriageReturn();
-        screen.newLine();
     }
 
     /** What Docker said when it could not do what was asked of it. */
@@ -305,10 +286,13 @@ public class TerminalTab {
         if (isConnected()) {
             return;
         }
+        showingInstall = true;
         Terminal screen = terminal.getTerminal();
         screen.clearScreen();
         screen.cursorPosition(1, 1);
+        screen.characterAttributes(settings.styleOf(ServiceStatus.INSTALLING));
         writeLines(screen, text);
+        screen.characterAttributes(settings.getDefaultStyle());
     }
 
     /**
@@ -356,8 +340,18 @@ public class TerminalTab {
      * <p>
      * A download that failed keeps what it printed, that being the only account of
      * why.
+     *
+     * <p>
+     * Only when there was a download to end. This is told about every status that is not
+     * INSTALLING, healthy included, so without that guard it cleared the screen a moment
+     * after the service said it was ready -- taking the green line with it, and racing
+     * the client's first output. The screen went empty and stayed that way.
      */
     public void endInstallProgress(boolean succeeded) {
+        if (!showingInstall) {
+            return;
+        }
+        showingInstall = false;
         if (succeeded) {
             Terminal screen = terminal.getTerminal();
             screen.clearScreen();
@@ -423,6 +417,14 @@ public class TerminalTab {
                     DockerCommand.EXECUTABLE, "exec", "-it", "-e", "TERM=" + TERM,
                     database.containerName()));
             command.addAll(clientFor(database));
+
+            // Whatever the launcher had been saying while it waited -- the download, or
+            // the word with the dots after it -- is finished business the moment the
+            // client has a screen of its own.
+            stopLoading();
+            showingInstall = false;
+            terminal.getTerminal().clearScreen();
+            terminal.getTerminal().cursorPosition(1, 1);
 
             process = new PtyProcessBuilder()
                     .setCommand(command.toArray(new String[0]))
@@ -601,7 +603,7 @@ public class TerminalTab {
         public TextStyle getDefaultStyle() {
             return new TextStyle(
                     new TerminalColor(() -> asJediTerm(UIManager.getColor("TextPane.foreground"))),
-                    new TerminalColor(() -> asJediTerm(UIManager.getColor("TextPane.background"))));
+                    new TerminalColor(() -> asJediTerm(UIManager.getColor(CONSOLE_BACKGROUND))));
         }
 
         /**
@@ -626,18 +628,22 @@ public class TerminalTab {
         @Override
         public TextStyle getFoundPatternColor() {
             return new TextStyle(
-                    new TerminalColor(() -> asJediTerm(UIManager.getColor("TextPane.background"))),
+                    new TerminalColor(() -> asJediTerm(UIManager.getColor(CONSOLE_BACKGROUND))),
                     new TerminalColor(() -> asJediTerm(colours.of(AnsiColor.YELLOW))));
         }
 
         /**
-         * The theme's green on the usual paper, which is what a thing gone right reads
-         * as.
+         * What the launcher's own words are painted in while a service is on its way up.
+         *
+         * <p>
+         * The same colour as the indicator beside the service, read from the same place,
+         * so the dot and the terminal cannot come to disagree: purple while the image is
+         * being fetched, teal while it is starting.
          */
-        TextStyle goodNewsStyle() {
+        TextStyle styleOf(ServiceStatus status) {
             return new TextStyle(
-                    new TerminalColor(() -> asJediTerm(colours.of(AnsiColor.GREEN))),
-                    new TerminalColor(() -> asJediTerm(UIManager.getColor("TextPane.background"))));
+                    new TerminalColor(() -> asJediTerm(StatusAppearance.colorFor(status))),
+                    new TerminalColor(() -> asJediTerm(UIManager.getColor(CONSOLE_BACKGROUND))));
         }
 
         /**

@@ -170,6 +170,39 @@ class InstallDisplayTest {
         assertThat(tab.screenText()).contains("Error");
     }
 
+    @Test
+    void theEndOfAnInstallThatNeverHappenedClearsNothing() throws Exception {
+        // The end of an install is announced for every status that is not INSTALLING.
+        // Taken at face value it cleared the screen whatever was on it, including
+        // whatever the launcher had just written and whatever the client had begun to
+        // print: the console went empty and stayed empty.
+        TerminalTab tab = terminalTab();
+
+        onSwing(() -> tab.updateStatus(com.uoc.docker.ServiceStatus.STARTING));
+        onSwing(() -> tab.endInstallProgress(true));
+
+        assertThat(tab.screenText()).containsIgnoringCase("loading");
+    }
+
+    @Test
+    void anInstallThatHappenedIsStillClearedAway() throws Exception {
+        TerminalTab tab = terminalTab();
+
+        onSwing(() -> tab.showInstallProgress("Image redis:8.10.1 Pulling"));
+        onSwing(() -> tab.endInstallProgress(true));
+
+        assertThat(tab.screenText()).isBlank();
+    }
+
+    @Test
+    void theWaitIsSaidOutLoudWhileThereIsNothingElseToRead() throws Exception {
+        TerminalTab tab = terminalTab();
+
+        onSwing(() -> tab.updateStatus(com.uoc.docker.ServiceStatus.STARTING));
+
+        assertThat(tab.screenText()).containsIgnoringCase("loading");
+    }
+
     private static TerminalTab terminalTab() throws Exception {
         TerminalTab[] built = new TerminalTab[1];
         SwingUtilities.invokeAndWait(() ->

@@ -15,6 +15,7 @@ import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.Timer;
+import javax.swing.UIManager;
 
 import com.formdev.flatlaf.extras.FlatSVGIcon;
 import com.uoc.docker.Database;
@@ -234,6 +235,7 @@ public class ServicesPanel {
         }
 
         if (row == 0) {
+            paintTheEmptyMessage();
             // Otherwise the heading sits above an empty rectangle, which reads as a fault
             // rather than as a choice, and says nothing about how to undo it.
             gbc.gridy = 0;
@@ -294,6 +296,20 @@ public class ServicesPanel {
             }
             updateAction(key, status);
         });
+        paintTheEmptyMessage();
+    }
+
+    /**
+     * Gives the "nothing chosen" line the colour of the theme now in use.
+     *
+     * <p>
+     * It is only in the panel while there is nothing else in it, so most of the time a
+     * change of theme walks straight past it: what repaints one goes through the
+     * components on screen, and this is not one of them. It kept whatever colour it was
+     * built under, which on a window turned dark meant black text on a dark panel.
+     */
+    private void paintTheEmptyMessage() {
+        nothingChosen.setForeground(UIManager.getColor("Label.disabledForeground"));
     }
 
     public JPanel getComponent() {
