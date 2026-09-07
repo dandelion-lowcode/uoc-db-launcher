@@ -140,7 +140,10 @@ public class Launcher {
         dockerManager.setListener((key, status) -> {
             lastKnown.put(Database.fromKey(key), status);
             servicesPanel.updateStatus(key, status);
-            tabs.setSendEnabled(key, status == ServiceStatus.HEALTHY);
+            // The terminal is told the status rather than only whether it can be typed
+            // at: the wait between a container starting and its database answering is
+            // the longest stretch with nothing on screen, and it has to say so.
+            tabs.updateStatus(key, status);
             // The console comes back as soon as the download is over, whichever way it
             // ended. What it printed stays on screen: when it failed, that is the only
             // account of why.

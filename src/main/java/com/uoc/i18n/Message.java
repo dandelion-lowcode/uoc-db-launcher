@@ -76,6 +76,8 @@ public enum Message {
     TERMINAL_FIND_NEXT("terminal.findNext"),
     LABEL_SERVICES_NONE("label.services.none"),
     LABEL_UTILITIES("label.utilities"),
+    CONSOLE_LOADING("console.loading"),
+    CONSOLE_READY("console.ready"),
     BUTTON_OPEN_NEO4J_BROWSER("button.open.neo4jBrowser"),
     BUTTON_OPEN_STUDIO3T("button.open.studio3t"),
     LABEL_STUDIO3T_DOWNLOAD("label.studio3t.download"),

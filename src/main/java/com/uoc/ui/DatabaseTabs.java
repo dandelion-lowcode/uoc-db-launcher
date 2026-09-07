@@ -263,6 +263,17 @@ public class DatabaseTabs {
     }
 
     /**
+     * Passes on what a service is doing, so its terminal can say so while there is
+     * nothing else in it to read.
+     */
+    public void updateStatus(String key, com.uoc.docker.ServiceStatus status) {
+        TerminalTab tab = tabFor(key);
+        if (tab != null) {
+            tab.updateStatus(status);
+        }
+    }
+
+    /**
      * Prints in the console why Docker refused to start a service.
      *
      * <p>

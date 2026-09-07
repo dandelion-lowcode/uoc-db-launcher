@@ -1,5 +1,40 @@
 package com.uoc.ui;
 
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.Toolkit;
+import java.awt.event.HierarchyEvent;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
+import java.awt.event.KeyListener;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import javax.swing.BorderFactory;
+import javax.swing.JCheckBox;
+import javax.swing.JComponent;
+import javax.swing.JLabel;
+import javax.swing.JMenuItem;
+import javax.swing.JPanel;
+import javax.swing.JRootPane;
+import javax.swing.JScrollBar;
+import javax.swing.JTextField;
+import javax.swing.KeyStroke;
+import javax.swing.MenuElement;
+import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
+import javax.swing.UIManager;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
+
 import com.formdev.flatlaf.FlatClientProperties;
 import com.formdev.flatlaf.ui.FlatArrowButton;
 import com.formdev.flatlaf.util.UIScale;
@@ -27,66 +62,42 @@ import com.uoc.ansi.IAnsiColors;
 import com.uoc.ansi.ThemeAnsiColors;
 import com.uoc.docker.Database;
 import com.uoc.docker.DockerCommand;
+import com.uoc.docker.ServiceStatus;
 import com.uoc.i18n.Message;
 import com.uoc.i18n.Translations;
-
-import javax.swing.BorderFactory;
-import javax.swing.JCheckBox;
-import javax.swing.JComponent;
-import javax.swing.JLabel;
-import javax.swing.JMenuItem;
-import javax.swing.JPanel;
-import javax.swing.JRootPane;
-import javax.swing.JScrollBar;
-import javax.swing.JTextField;
-import javax.swing.KeyStroke;
-import javax.swing.MenuElement;
-import javax.swing.SwingConstants;
-import javax.swing.SwingUtilities;
-import javax.swing.UIManager;
-import javax.swing.event.DocumentEvent;
-import javax.swing.event.DocumentListener;
-import java.awt.BorderLayout;
-import java.awt.Color;
-import java.awt.FlowLayout;
-import java.awt.Font;
-import java.awt.Graphics;
-import java.awt.Graphics2D;
-import java.awt.Toolkit;
-import java.awt.event.HierarchyEvent;
-import java.awt.event.KeyAdapter;
-import java.awt.event.KeyEvent;
-import java.awt.event.KeyListener;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 /**
  * A service's own client, in a real terminal.
  *
  * <p>
- * This replaced a box to type one query into and a pane to print the answer in. That
- * arrangement ran a fresh process per query, which is not what any of these clients is: a
- * variable set in mongosh was gone by the next line, a client that asked a question got no
- * answer, and "\h" in vsql hung the launcher outright, because vsql pages its help through
+ * This replaced a box to type one query into and a pane to print the answer in.
+ * That
+ * arrangement ran a fresh process per query, which is not what any of these
+ * clients is: a
+ * variable set in mongosh was gone by the next line, a client that asked a
+ * question got no
+ * answer, and "\h" in vsql hung the launcher outright, because vsql pages its
+ * help through
  * "--More--" and nothing on this side could press a key.
  *
  * <p>
- * What a student gets now is the client the course talks about, with its own prompt, its
- * own history and its own completion, in a session that lasts. What we keep is the window
+ * What a student gets now is the client the course talks about, with its own
+ * prompt, its
+ * own history and its own completion, in a session that lasts. What we keep is
+ * the window
  * around it: the heading, the theme's colours, the font and the zoom.
  */
 public class TerminalTab {
 
     /**
-     * What the client is told it is running under, in the container rather than here.
+     * What the client is told it is running under, in the container rather than
+     * here.
      *
      * <p>
-     * Left out, the process is started with TERM=dumb, and every client that can asks
-     * readline to switch line editing off: no history, no arrow keys, and no colour. It
+     * Left out, the process is started with TERM=dumb, and every client that can
+     * asks
+     * readline to switch line editing off: no history, no arrow keys, and no
+     * colour. It
      * looked for a while as though the terminal was not passing the keys on.
      */
     private static final String TERM = "xterm-256color";
@@ -105,14 +116,38 @@ public class TerminalTab {
 
     private PtyProcess process;
 
-    /** Whether the service is up. Nothing is connected to a container that is not. */
+    /**
+     * Whether the service is up. Nothing is connected to a container that is not.
+     */
     private boolean ready;
 
     /** Set when a session has ended and the next key should start another. */
     private boolean awaitingRestart;
 
+    /**
+     * The wait between the container being up and the database answering.
+     *
+     * <p>
+     * Nothing is written to the terminal in that time -- the image is fetched, the
+     * download's own display is cleared away, and then a service that takes half a
+     * minute
+     * to open its port leaves an empty black rectangle. A word with a growing run
+     * of dots
+     * after it is the difference between waiting and wondering whether it has hung.
+     */
+    private static final int DOT_MILLIS = 450;
+    private static final int MAX_DOTS = 3;
+
+    private final Translations translations;
+    private int dots;
+    private final javax.swing.Timer loading = new javax.swing.Timer(DOT_MILLIS, event -> {
+        dots = (dots + 1) % (MAX_DOTS + 1);
+        drawLoading();
+    });
+
     public TerminalTab(Database database, Translations translations) {
         this.database = database;
+        this.translations = translations;
         this.settings = new ConsoleLikeSettings(translations);
         this.terminal = new ThemedTerminal(settings);
 
@@ -124,7 +159,6 @@ public class TerminalTab {
         panel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
         panel.add(heading, BorderLayout.NORTH);
         panel.add(terminal, BorderLayout.CENTER);
-
 
         // Told when the emulator has finished with the stream, which is later than the
         // process ending; see sessionEnded.
@@ -154,12 +188,92 @@ public class TerminalTab {
      * Told whether the service is up.
      *
      * <p>
-     * A session is opened as soon as it is, so that a student who starts a database finds
+     * A session is opened as soon as it is, so that a student who starts a database
+     * finds
      * a prompt waiting rather than a dead rectangle they have to poke.
      */
     public void setReady(boolean serviceIsUp) {
         ready = serviceIsUp;
         connectIfPossible();
+    }
+
+    /**
+     * Told what the service is doing, so the terminal can say so while there is
+     * nothing
+     * else in it.
+     *
+     * <p>
+     * Three things happen in here between a student pressing play and being able to
+     * type:
+     * the image is fetched, which draws its own display; the container starts; and
+     * the
+     * database opens its port, which for Vertica and the Twitter graph is the
+     * longest of
+     * the three. Only the first said anything.
+     */
+    public void updateStatus(ServiceStatus status) {
+        if (status == ServiceStatus.HEALTHY) {
+            boolean wasWaiting = loading.isRunning();
+            stopLoading();
+            if (wasWaiting && !isConnected()) {
+                announceReady();
+            }
+        } else if (status == ServiceStatus.STARTING || status == ServiceStatus.RUNNING) {
+            startLoading();
+        } else {
+            stopLoading();
+        }
+        setReady(status == ServiceStatus.HEALTHY);
+    }
+
+    /** Begins the wait, unless a client is already running in here. */
+    private void startLoading() {
+        if (isConnected() || loading.isRunning()) {
+            return;
+        }
+        dots = 0;
+        drawLoading();
+        loading.start();
+    }
+
+    private void stopLoading() {
+        loading.stop();
+    }
+
+    private void drawLoading() {
+        if (isConnected()) {
+            stopLoading();
+            return;
+        }
+        Terminal screen = terminal.getTerminal();
+        screen.clearScreen();
+        screen.cursorPosition(1, 1);
+        screen.writeCharacters(translations.get(Message.CONSOLE_LOADING) + ".".repeat(dots));
+    }
+
+    /**
+     * Says the database is answering, and leaves the client's own prompt to follow.
+     *
+     * <p>
+     * In the theme's green, which is the one colour here that means a thing has
+     * gone
+     * right, and with a blank line after it so the prompt that follows does not
+     * read as
+     * part of the sentence.
+     */
+    private void announceReady() {
+        Terminal screen = terminal.getTerminal();
+        screen.clearScreen();
+        screen.cursorPosition(1, 1);
+
+        screen.characterAttributes(settings.goodNewsStyle());
+        screen.writeCharacters(translations.get(Message.CONSOLE_READY));
+        screen.characterAttributes(settings.getDefaultStyle());
+
+        screen.carriageReturn();
+        screen.newLine();
+        screen.carriageReturn();
+        screen.newLine();
     }
 
     /** What Docker said when it could not do what was asked of it. */
@@ -174,13 +288,17 @@ public class TerminalTab {
      *
      * <p>
      * Redrawn from the top of a cleared screen every time, which is what makes it a
-     * display rather than a transcript. The text is the whole picture as it now stands,
-     * not the news since last time, so appending it printed the entire block again on
+     * display rather than a transcript. The text is the whole picture as it now
+     * stands,
+     * not the news since last time, so appending it printed the entire block again
+     * on
      * every one of the several hundred updates a download produces.
      *
      * <p>
-     * Written into the terminal only while nothing is running in it. Text arriving from
-     * elsewhere in the middle of a live session lands wherever the cursor happens to be,
+     * Written into the terminal only while nothing is running in it. Text arriving
+     * from
+     * elsewhere in the middle of a live session lands wherever the cursor happens
+     * to be,
      * and a client redrawing its prompt makes a mess of it.
      */
     public void showInstallProgress(String text) {
@@ -197,10 +315,14 @@ public class TerminalTab {
      * Writes text that has line breaks in it.
      *
      * <p>
-     * The breaks are asked for rather than written: writeCharacters puts characters into
-     * the screen where the cursor is, and a line feed among them is a character like any
-     * other rather than an instruction to move. Passed straight through, an eleven-line
-     * block arrived as one line, and everything past the eightieth column of it was off
+     * The breaks are asked for rather than written: writeCharacters puts characters
+     * into
+     * the screen where the cursor is, and a line feed among them is a character
+     * like any
+     * other rather than an instruction to move. Passed straight through, an
+     * eleven-line
+     * block arrived as one line, and everything past the eightieth column of it was
+     * off
      * the edge of the screen.
      */
     private static void writeLines(Terminal screen, String text) {
@@ -223,13 +345,17 @@ public class TerminalTab {
      * The download is over, one way or the other.
      *
      * <p>
-     * A download that worked is finished business, and what comes next is the client's
-     * own prompt: it should open on a clear screen rather than under a list of layer
-     * ids. The cursor goes back to the top with it, or the prompt appears wherever the
+     * A download that worked is finished business, and what comes next is the
+     * client's
+     * own prompt: it should open on a clear screen rather than under a list of
+     * layer
+     * ids. The cursor goes back to the top with it, or the prompt appears wherever
+     * the
      * last line of the block happened to leave it, below a screenful of nothing.
      *
      * <p>
-     * A download that failed keeps what it printed, that being the only account of why.
+     * A download that failed keeps what it printed, that being the only account of
+     * why.
      */
     public void endInstallProgress(boolean succeeded) {
         if (succeeded) {
@@ -254,8 +380,10 @@ public class TerminalTab {
      * Repainted in the theme that has just been installed.
      *
      * <p>
-     * The colours are read as the terminal paints rather than kept, so text already on
-     * screen changes with it: a character remembers which of the sixteen colours it asked
+     * The colours are read as the terminal paints rather than kept, so text already
+     * on
+     * screen changes with it: a character remembers which of the sixteen colours it
+     * asked
      * for, not what that colour looked like at the time.
      */
     public void applyThemeColors() {
@@ -274,12 +402,16 @@ public class TerminalTab {
     }
 
     /**
-     * Starts the client inside its container, with a pseudo terminal between it and here.
+     * Starts the client inside its container, with a pseudo terminal between it and
+     * here.
      *
      * <p>
-     * The pseudo terminal is the point. "docker exec -t" alone gives the client a terminal
-     * to write to, but nothing on this side listens as a terminal, so no key ever goes
-     * back. Pty4J puts a real one in the middle, and what the client asks, the student can
+     * The pseudo terminal is the point. "docker exec -t" alone gives the client a
+     * terminal
+     * to write to, but nothing on this side listens as a terminal, so no key ever
+     * goes
+     * back. Pty4J puts a real one in the middle, and what the client asks, the
+     * student can
      * answer.
      */
     private void connect() {
@@ -312,12 +444,16 @@ public class TerminalTab {
     }
 
     /**
-     * The client each service is driven with, and the one place that is written down.
+     * The client each service is driven with, and the one place that is written
+     * down.
      *
      * <p>
-     * Riak and Elasticsearch have no shell of their own: the course drives both with curl
-     * over HTTP, so what opens is a shell, and a student types the request the notes give
-     * them. Pretending otherwise would mean inventing a console neither product has.
+     * Riak and Elasticsearch have no shell of their own: the course drives both
+     * with curl
+     * over HTTP, so what opens is a shell, and a student types the request the
+     * notes give
+     * them. Pretending otherwise would mean inventing a console neither product
+     * has.
      */
     static List<String> clientFor(Database database) {
         return switch (database) {
@@ -328,7 +464,7 @@ public class TerminalTab {
             case REDIS -> List.of("redis-cli");
             case RIAK, ELASTICSEARCH -> List.of("sh");
             case COCKROACHDB ->
-                    List.of("cockroach", "sql", "--insecure", "--host=localhost:26257");
+                List.of("cockroach", "sql", "--insecure", "--host=localhost:26257");
             case VERTICA -> List.of("/opt/vertica/bin/vsql",
                     "-h", "localhost", "-U", "dbadmin", "-d", "VMart");
             case ARANGODB -> List.of("arangosh",
@@ -345,9 +481,12 @@ public class TerminalTab {
      * Says the session is over, rather than leaving a screen that looks frozen.
      *
      * <p>
-     * Said when JediTerm reports the session closed rather than when the process ends.
-     * Those are not the same moment: the process is gone while its last bytes are still
-     * being read and drawn, so a message written then lands in the middle of the client's
+     * Said when JediTerm reports the session closed rather than when the process
+     * ends.
+     * Those are not the same moment: the process is gone while its last bytes are
+     * still
+     * being read and drawn, so a message written then lands in the middle of the
+     * client's
      * own goodbye.
      */
     private void sessionEnded() {
@@ -366,7 +505,8 @@ public class TerminalTab {
 
     /**
      * What JediTerm asks about how to draw. It asks again every time the font is
-     * reinitialised, which is what carries a change of font, zoom or theme to a terminal
+     * reinitialised, which is what carries a change of font, zoom or theme to a
+     * terminal
      * already on screen.
      */
     static final class ConsoleLikeSettings extends DefaultSettingsProvider {
@@ -383,7 +523,8 @@ public class TerminalTab {
         // The menu a right click opens, in the language the student picked. JediTerm
         // names these in English and there is no way to hand it a bundle: what there is
         // is one method per item, so each is answered with our own wording and the keys
-        // JediTerm already chose. Read as the menu is built, so switching language while
+        // JediTerm already chose. Read as the menu is built, so switching language
+        // while
         // it is closed is enough.
 
         @Override
@@ -469,13 +610,17 @@ public class TerminalTab {
          *
          * <p>
          * JediTerm's is black on pure #FFFF00, written into the library and the same
-         * under either theme. Our yellow was picked to read against the background it is
-         * printed on, so using it as the paper and the background as the ink is a pairing
-         * already measured. Suppliers again, so a change of theme reaches a match that is
+         * under either theme. Our yellow was picked to read against the background it
+         * is
+         * printed on, so using it as the paper and the background as the ink is a
+         * pairing
+         * already measured. Suppliers again, so a change of theme reaches a match that
+         * is
          * already highlighted.
          *
          * <p>
-         * The selection needs nothing: useInverseSelectionColor is on, so JediTerm swaps
+         * The selection needs nothing: useInverseSelectionColor is on, so JediTerm
+         * swaps
          * whatever colours the text already has, and those are ours.
          */
         @Override
@@ -486,11 +631,23 @@ public class TerminalTab {
         }
 
         /**
+         * The theme's green on the usual paper, which is what a thing gone right reads
+         * as.
+         */
+        TextStyle goodNewsStyle() {
+            return new TextStyle(
+                    new TerminalColor(() -> asJediTerm(colours.of(AnsiColor.GREEN))),
+                    new TerminalColor(() -> asJediTerm(UIManager.getColor("TextPane.background"))));
+        }
+
+        /**
          * The sixteen colours a client asks for by number, answered from the theme.
          *
          * <p>
-         * They are the ones defined in themes/FlatLightLaf.properties and its dark twin,
-         * measured for contrast against the background each is painted on. JediTerm's own
+         * They are the ones defined in themes/FlatLightLaf.properties and its dark
+         * twin,
+         * measured for contrast against the background each is painted on. JediTerm's
+         * own
          * palette is a second set of colours nobody here chose.
          */
         @Override
@@ -536,7 +693,8 @@ public class TerminalTab {
         }
 
         /**
-         * A plain scroll bar, so the look and feel styles it. JediTerm's own is painted to
+         * A plain scroll bar, so the look and feel styles it. JediTerm's own is painted
+         * to
          * show where the matches of a search are, and there is no search here.
          */
         @Override
@@ -544,7 +702,9 @@ public class TerminalTab {
             return new JScrollBar();
         }
 
-        /** Ours rather than JediTerm's, which is English and painted in the Basic style. */
+        /**
+         * Ours rather than JediTerm's, which is English and painted in the Basic style.
+         */
         @Override
         protected JediTermSearchComponent createSearchComponent() {
             return new FindBar(settings.translations);
@@ -558,7 +718,8 @@ public class TerminalTab {
 
         /**
          * Reads the font again and lays the screen out for it. JediTerm works this out
-         * once, when the panel is built, so without this a change of font, zoom or theme
+         * once, when the panel is built, so without this a change of font, zoom or
+         * theme
          * shows up only in a terminal opened afterwards.
          */
         private void refreshFont() {
@@ -583,7 +744,8 @@ public class TerminalTab {
      * The panel, taught the two things it has to know about the window it sits in.
      *
      * <p>
-     * Both come from the same habit in JediTerm: it overrides a method and does not call
+     * Both come from the same habit in JediTerm: it overrides a method and does not
+     * call
      * the one it overrode, so what Swing would have done never happens.
      */
     private static final class HostTerminalPanel extends TerminalPanel {
@@ -603,8 +765,10 @@ public class TerminalTab {
          * <p>
          * JediTerm overrides processKeyEvent and never calls super, and super is where
          * Swing matches a key against the menu bar's accelerators. Every shortcut the
-         * application has stopped working while a terminal had the focus, zoom being the
-         * one a student notices. Accelerators are looked up rather than named here, so a
+         * application has stopped working while a terminal had the focus, zoom being
+         * the
+         * one a student notices. Accelerators are looked up rather than named here, so
+         * a
          * menu that gains one later keeps working.
          */
         @Override
@@ -654,7 +818,8 @@ public class TerminalTab {
          * <p>
          * JediTerm replaces the rendering hints with one of its own, plain grey
          * antialiasing. Windows and most Linux desktops ask for subpixel smoothing
-         * instead, which is what every other character in this application is drawn with,
+         * instead, which is what every other character in this application is drawn
+         * with,
          * so the terminal came out thinner and grubbier than the panel beside it.
          */
         @Override
@@ -672,9 +837,11 @@ public class TerminalTab {
      * The bar Ctrl+F opens, built out of ordinary Swing widgets.
      *
      * <p>
-     * JediTerm's own is nearly right: its text field and its checkbox are painted by
+     * JediTerm's own is nearly right: its text field and its checkbox are painted
+     * by
      * whatever look and feel is installed. Its two arrows are not. They are
-     * BasicArrowButton, which draws its own triangle and its own border in the Basic
+     * BasicArrowButton, which draws its own triangle and its own border in the
+     * Basic
      * style whatever the look and feel says, so they sat next to FlatLaf's widgets
      * looking like something from another decade.
      */
@@ -758,7 +925,9 @@ public class TerminalTab {
             listeners.add(listener);
         }
 
-        /** JediTerm listens for Escape and Enter, and it is the field they arrive at. */
+        /**
+         * JediTerm listens for Escape and Enter, and it is the field they arrive at.
+         */
         @Override
         public void addKeyListener(KeyListener listener) {
             text.addKeyListener(listener);
@@ -788,12 +957,15 @@ public class TerminalTab {
      * <p>
      * This is what the find bar was missing. JediTerm builds its two arrows out of
      * BasicArrowButton, which paints its triangle and its border in the Basic style
-     * whatever look and feel is installed, so they sat among FlatLaf's widgets looking
+     * whatever look and feel is installed, so they sat among FlatLaf's widgets
+     * looking
      * like something from another decade.
      *
      * <p>
-     * FlatArrowButton is handed its colours once, when it is built, and the bar outlives
-     * a change of theme. They are read again whenever the look and feel is reinstalled,
+     * FlatArrowButton is handed its colours once, when it is built, and the bar
+     * outlives
+     * a change of theme. They are read again whenever the look and feel is
+     * reinstalled,
      * which is the moment those colours have new values.
      */
     private static final class ThemedArrow extends FlatArrowButton {
