@@ -7,6 +7,7 @@ import javax.swing.JEditorPane;
 import javax.swing.JOptionPane;
 import javax.swing.event.HyperlinkEvent;
 import java.awt.Desktop;
+import java.util.List;
 
 public class DockerAvailability {
 
@@ -16,13 +17,25 @@ public class DockerAvailability {
     }
 
     public static boolean isRunning() {
+        return isRunning(new SystemProcessRunner());
+    }
+
+    /**
+     * Whether the daemon answers, asked of something other than this machine's Docker.
+     *
+     * <p>
+     * "docker info" is the question because it is the one command that needs the daemon
+     * rather than only the executable: a machine with Docker installed and not started
+     * answers every other question happily, and that is the state a student is most often
+     * in when they open the launcher.
+     *
+     * @param runner what runs the command
+     */
+    static boolean isRunning(ProcessRunner runner) {
         try {
-            Process process = new ProcessBuilder(DockerCommand.EXECUTABLE, "info").start();
-            return process.waitFor() == 0;
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return false;
+            return !runner.run(List.of(DockerCommand.EXECUTABLE, "info"), null).failed();
         } catch (Exception e) {
+            // Docker not being installed at all arrives here rather than as an exit code.
             return false;
         }
     }

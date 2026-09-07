@@ -2,6 +2,7 @@ package com.uoc.platform;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Function;
 
 /**
  * Reports whether the desktop is currently using a dark appearance.
@@ -19,22 +20,44 @@ public final class SystemDarkMode {
     }
 
     public static boolean isEnabled() {
-        switch (OperatingSystem.current()) {
+        return isEnabled(OperatingSystem.current(), SystemDarkMode::commandOutput);
+    }
+
+    /**
+     * The same question asked of something other than this machine.
+     *
+     * <p>
+     * Which command to run and what its answer means are the whole of what this class
+     * knows, and neither can be checked on a machine that answers only one way: a test
+     * running on Windows cannot tell whether the macOS branch reads its answer correctly,
+     * and cannot put the machine into dark mode to find out about its own.
+     *
+     * @param system what to answer as
+     * @param ask    runs a command and returns what it wrote, or an empty string if it
+     *               could not be run at all
+     */
+    static boolean isEnabled(OperatingSystem system, Function<List<String>, String> ask) {
+        switch (system) {
             case WINDOWS:
                 // AppsUseLightTheme is 0x0 while the dark appearance is active.
-                return commandOutput(List.of("reg", "query",
+                return ask.apply(List.of("reg", "query",
                         "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
                         "/v", "AppsUseLightTheme")).contains("0x0");
             case MACOS:
                 // The key only exists while the dark appearance is active.
-                return commandOutput(List.of("defaults", "read", "-g", "AppleInterfaceStyle"))
+                return ask.apply(List.of("defaults", "read", "-g", "AppleInterfaceStyle"))
                         .toLowerCase(Locale.ROOT).contains(DARK);
             case LINUX:
-                String scheme = commandOutput(List.of(GSETTINGS, GSETTINGS_GET, GNOME_INTERFACE, "color-scheme")).toLowerCase(Locale.ROOT);
+                String scheme = ask.apply(
+                        List.of(GSETTINGS, GSETTINGS_GET, GNOME_INTERFACE, "color-scheme"))
+                        .toLowerCase(Locale.ROOT);
                 if (scheme.contains(DARK)) {
                     return true;
                 }
-                return commandOutput(List.of(GSETTINGS, GSETTINGS_GET, GNOME_INTERFACE, "gtk-theme")).toLowerCase(Locale.ROOT).contains(DARK);
+                // Desktops older than color-scheme say it in the theme's name instead.
+                return ask.apply(
+                        List.of(GSETTINGS, GSETTINGS_GET, GNOME_INTERFACE, "gtk-theme"))
+                        .toLowerCase(Locale.ROOT).contains(DARK);
             default:
                 return false;
         }

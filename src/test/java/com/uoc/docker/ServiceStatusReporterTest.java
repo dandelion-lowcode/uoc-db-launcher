@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 /**
  * The reporter holds what is known about each service and announces what should be shown.
@@ -221,5 +222,35 @@ class ServiceStatusReporterTest {
         reporter.enterPhase("mongo", phase);
 
         assertThat(reporter.stateOf("mongo").phase()).isEqualTo(phase);
+    }
+
+    @Test
+    void howAnInstallIsGoingIsPassedOnWhereTheListenerExpectsToBeCalled() {
+        java.util.List<String> shown = new java.util.ArrayList<>();
+        java.util.List<Runnable> dispatched = new java.util.ArrayList<>();
+        ServiceStatusReporter reporter = new ServiceStatusReporter(dispatched::add);
+        reporter.setProgressListener((key, text) -> shown.add(key + ": " + text));
+
+        reporter.reportProgress("mongo", "Downloading 12.5MB/50MB");
+
+        // Nothing has reached the listener yet: it is the dispatcher's to run, and in the
+        // application that means the interface thread rather than a Docker worker.
+        assertThat(shown).isEmpty();
+        dispatched.forEach(Runnable::run);
+        assertThat(shown).containsExactly("mongo: Downloading 12.5MB/50MB");
+    }
+
+    @Test
+    void aReporterNobodyIsListeningToSaysNothingAndThrowsNothing() {
+        // Every listener is set after construction, and the manager reports statuses from
+        // the moment it starts. Between the two there is nobody there.
+        ServiceStatusReporter unheard = new ServiceStatusReporter(Runnable::run);
+
+        assertThatCode(() -> {
+            unheard.watch("mongo");
+            unheard.observe("mongo", Observation.HEALTHY);
+            unheard.reportFailure("mongo", "no arranca");
+            unheard.reportProgress("mongo", "Pulling");
+        }).doesNotThrowAnyException();
     }
 }
