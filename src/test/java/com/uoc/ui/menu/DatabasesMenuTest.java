@@ -19,8 +19,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
 import com.uoc.docker.Database;
-import com.uoc.docker.ProcessRunner;
-import com.uoc.docker.QueryRunner;
 import com.uoc.i18n.Translations;
 import com.uoc.ui.DatabaseTabs;
 
@@ -41,12 +39,10 @@ class DatabasesMenuTest {
 
     @BeforeEach
     void buildTheMenu() throws Exception {
-        ProcessRunner fakeProcess = (command, stdin) -> new ProcessRunner.Result(0, "");
-
         SwingUtilities.invokeAndWait(() -> {
             Translations translations = new Translations(Locale.ENGLISH);
             tabs = new DatabaseTabs(List.of(Database.values()),
-                    new QueryRunner(fakeProcess), translations, () -> {
+                    translations, () -> {
                     });
             menu = DatabasesMenu.build(tabs, started::add, stopped::add, translations);
         });

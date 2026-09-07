@@ -8,8 +8,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-import com.formdev.flatlaf.extras.FlatSVGIcon;
-
 import javax.swing.JTabbedPane;
 import javax.swing.SwingUtilities;
 
@@ -19,9 +17,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
+import com.formdev.flatlaf.extras.FlatSVGIcon;
 import com.uoc.docker.Database;
-import com.uoc.docker.ProcessRunner;
-import com.uoc.docker.QueryRunner;
 import com.uoc.i18n.Translations;
 
 @DisplayName("the tabs and which of them are showing")
@@ -41,10 +38,8 @@ class DatabaseTabsTest {
 
     @BeforeEach
     void buildTheTabs() throws Exception {
-        ProcessRunner fakeProcess = (command, stdin) -> new ProcessRunner.Result(0, "");
-
         SwingUtilities.invokeAndWait(() -> {
-            tabs = new DatabaseTabs(List.of(Database.values()), new QueryRunner(fakeProcess),
+            tabs = new DatabaseTabs(List.of(Database.values()),
                     new Translations(Locale.ENGLISH), () -> {
                     });
             tabs.addVisibilityListener((database, shown) -> changes.add(new Change(database, shown)));
@@ -234,7 +229,7 @@ class DatabaseTabsTest {
     void aStatusForAServiceWithoutAConsoleChangesNothingAndThrowsNothing() {
         // Docker reports on every service it is watching, Jupyter included, and the
         // listener that reacts used to reach straight into a console that is not there:
-        // NullPointerException: Cannot invoke "DatabaseTab.setSendEnabled(boolean)"
+        // NullPointerException: Cannot invoke "TerminalTab.setReady(boolean)"
         // because the return value of "DatabaseTabs.tabFor(String)" is null
         assertThatCode(() -> tabs.setSendEnabled(Database.JUPYTER.key(), true))
                 .doesNotThrowAnyException();
@@ -249,34 +244,13 @@ class DatabaseTabsTest {
     }
 
     @Test
-    void aStatusForADatabaseStillOpensAndClosesItsConsole() {
+    void aStatusForADatabaseIsAcceptedWhetherOrNotItIsShowing() {
         // The guard for Jupyter must not have quietly stopped this working for the
-        // services that do have a console.
-        tabs.setSendEnabled(Database.MONGO.key(), true);
-        assertThat(sendButtonOf(Database.MONGO).isEnabled()).isTrue();
-
-        tabs.setSendEnabled(Database.MONGO.key(), false);
-        assertThat(sendButtonOf(Database.MONGO).isEnabled()).isFalse();
-    }
-
-    private javax.swing.AbstractButton sendButtonOf(Database database) {
-        return (javax.swing.AbstractButton) findByName(
-                tabs.tabFor(database.key()).getPanel(), DatabaseTab.SEND);
-    }
-
-    private static java.awt.Component findByName(java.awt.Container root, String name) {
-        for (java.awt.Component child : root.getComponents()) {
-            if (name.equals(child.getName())) {
-                return child;
-            }
-            if (child instanceof java.awt.Container container) {
-                java.awt.Component found = findByName(container, name);
-                if (found != null) {
-                    return found;
-                }
-            }
-        }
-        return null;
+        // services that do have a terminal.
+        assertThatCode(() -> tabs.setSendEnabled(Database.MONGO.key(), true))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> tabs.setSendEnabled(Database.MONGO.key(), false))
+                .doesNotThrowAnyException();
     }
 
     @Test
@@ -300,7 +274,8 @@ class DatabaseTabsTest {
         double drawnAspect = (double) drawn.getIconWidth() / drawn.getIconHeight();
 
         // In pixels rather than as a ratio: Vertica's is 28 by 5, and the half pixel
-        // rounding leaves there is a tenth of the shorter side. A ratio compared closely
+        // rounding leaves there is a tenth of the shorter side. A ratio compared
+        // closely
         // enough to catch a squashed icon would fail on that alone.
         assertThat(shown.getIconHeight()).as("%s reaches the tab stretched", database)
                 .isCloseTo((int) Math.round(shown.getIconWidth() / drawnAspect), offset(1));

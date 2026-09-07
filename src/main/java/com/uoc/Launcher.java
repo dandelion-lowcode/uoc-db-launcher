@@ -27,7 +27,6 @@ import com.formdev.flatlaf.extras.FlatSVGIcon;
 import com.uoc.docker.Database;
 import com.uoc.docker.DockerAvailability;
 import com.uoc.docker.DockerManager;
-import com.uoc.docker.QueryRunner;
 import com.uoc.docker.ServiceStatus;
 import com.uoc.i18n.Message;
 import com.uoc.i18n.Translations;
@@ -85,7 +84,7 @@ public class Launcher {
         translations.register(() -> frame.setTitle(translations.get(Message.APP_TITLE)));
 
         List<Database> databases = List.of(Database.values());
-        DatabaseTabs tabs = new DatabaseTabs(databases, new QueryRunner(), translations,
+        DatabaseTabs tabs = new DatabaseTabs(databases, translations,
                 () -> openJupyter(translations), preferences);
 
         DockerManager dockerManager = new DockerManager().start();

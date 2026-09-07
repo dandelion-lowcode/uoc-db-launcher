@@ -17,7 +17,41 @@
         <excluded.groups>integration</excluded.groups>
     </properties>
 
+    <!--
+        JediTerm is not on Maven Central. JetBrains publishes it to the repository its
+        IDEs are built from, which is why this entry exists and why an offline build
+        needs it in the local cache first.
+    -->
+    <repositories>
+        <repository>
+            <id>intellij-dependencies</id>
+            <url>https://packages.jetbrains.team/maven/p/ij/intellij-dependencies</url>
+        </repository>
+    </repositories>
+
     <dependencies>
+        <!--
+            The terminal every console is now. JediTerm is the emulator: it reads the
+            escape sequences a client writes and paints them. Pty4J is the pseudo
+            terminal underneath, which is what makes the client believe a person is
+            there, and it is that belief that makes "\h" page rather than hang.
+        -->
+        <dependency>
+            <groupId>org.jetbrains.jediterm</groupId>
+            <artifactId>jediterm-core</artifactId>
+            <version>3.74</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jetbrains.jediterm</groupId>
+            <artifactId>jediterm-ui</artifactId>
+            <version>3.74</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jetbrains.pty4j</groupId>
+            <artifactId>pty4j</artifactId>
+            <version>0.13.12</version>
+        </dependency>
+
         <!--
             The look and feel is the whole of what the application ships. Docker is not a
             dependency at all: every command goes through the docker executable on the
