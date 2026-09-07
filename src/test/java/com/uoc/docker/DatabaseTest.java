@@ -99,13 +99,18 @@ class DatabaseTest {
     }
 
     @Test
-    void theCourseShowsThreeDatabasesAndOffersTheRestOnRequest() {
+    void theCourseOpensOnItsThreeDatabasesAndTheNotebooks() {
+        // What a student who has never run this before finds open: the three the course
+        // works through, and the notebooks they are worked through in. Opening a tab is
+        // not starting a service -- nothing runs until they ask for it -- so this is
+        // which services are theirs to hand rather than which are running.
         assertThat(Database.values()).filteredOn(Database::isShownByDefault)
-                .containsExactly(Database.MONGO, Database.CASSANDRA, Database.NEO4J);
+                .containsExactly(Database.MONGO, Database.CASSANDRA, Database.NEO4J,
+                        Database.JUPYTER);
         assertThat(Database.values()).filteredOn(d -> !d.isShownByDefault())
                 .containsExactly(Database.NEO4J_TWITTER, Database.REDIS, Database.RIAK,
                         Database.COCKROACHDB, Database.VERTICA, Database.ARANGODB,
-                        Database.ELASTICSEARCH, Database.JUPYTER);
+                        Database.ELASTICSEARCH);
     }
 
     @Test
@@ -133,17 +138,17 @@ class DatabaseTest {
     }
 
     @Test
-    void theOnesShownByDefaultComeFirst() {
-        // The menu draws its separator where this flag changes, so the order matters.
-        boolean seenOptional = false;
+    void whatOpensByDefaultFollowsFromTheGroupRatherThanBeingListedTwice() {
+        // The notebooks are shown from the start and are declared last, so the two are
+        // no longer one contiguous run at the front. What still has to hold is that the
+        // flag is derived: a service added to the course's own group opens with it, and
+        // nothing has to be remembered in a second place.
         for (Database database : Database.values()) {
-            if (!database.isShownByDefault()) {
-                seenOptional = true;
-            } else {
-                assertThat(seenOptional)
-                        .as("%s is shown by default but comes after one that is not", database)
-                        .isFalse();
-            }
+            boolean opensWithTheCourse = database.group() == Database.Group.GENERAL
+                    || database.group() == Database.Group.JUPYTER;
+
+            assertThat(database.isShownByDefault()).as("%s", database)
+                    .isEqualTo(opensWithTheCourse);
         }
     }
 

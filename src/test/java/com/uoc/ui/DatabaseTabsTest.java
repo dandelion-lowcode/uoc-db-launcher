@@ -206,7 +206,7 @@ class DatabaseTabsTest {
     }
 
     @Test
-    void theNotebooksHaveAButtonForTheTutorialToPointAt() {
+    void theNotebooksHaveAButtonThatOpensThem() {
         assertThat(tabs.notebooksButton()).isNotNull();
     }
 

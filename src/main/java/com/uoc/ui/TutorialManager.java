@@ -79,8 +79,7 @@ public class TutorialManager {
     private final List<Message> messages = List.of(
             Message.TUTORIAL_SERVICES,
             Message.TUTORIAL_START_MONGO,
-            Message.TUTORIAL_MENU,
-            Message.TUTORIAL_JUPYTER);
+            Message.TUTORIAL_MENU);
 
     /** Transparent, and sized to include the shadow the balloon casts. */
     private JPanel popup;
@@ -96,9 +95,17 @@ public class TutorialManager {
         translations.register(this::refreshText);
     }
 
+    /**
+     * Where each balloon sits by default.
+     *
+     * <p>
+     * The second is beside the services rather than above them: it points at MongoDB's
+     * own row while the student waits for it, and the panel is hard against the right
+     * edge of the window, so anything put above it has nowhere to go but over the row it
+     * is talking about.
+     */
     public void show(Component... targets) {
-        show(targets, SwingConstants.BOTTOM, SwingConstants.TOP,
-                SwingConstants.TOP, SwingConstants.BOTTOM);
+        show(targets, SwingConstants.BOTTOM, SwingConstants.LEFT, SwingConstants.TOP);
     }
 
     public void show(Component[] targets, int... positions) {

@@ -12,8 +12,10 @@ import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.prefs.Preferences;
 
 import javax.swing.BorderFactory;
@@ -33,11 +35,12 @@ import com.uoc.i18n.Translations;
 import com.uoc.ui.DatabaseTabs;
 import com.uoc.ui.ServicesPanel;
 import com.uoc.ui.TutorialManager;
+import com.uoc.ui.UtilitiesPanel;
 import com.uoc.ui.menu.ConsoleFontManager;
 import com.uoc.ui.menu.DatabasesMenu;
 import com.uoc.ui.menu.FileMenu;
-import com.uoc.ui.menu.LanguageManager;
 import com.uoc.ui.menu.HelpMenu;
+import com.uoc.ui.menu.LanguageManager;
 import com.uoc.ui.menu.LanguageMenu;
 import com.uoc.ui.menu.OptionsMenu;
 import com.uoc.ui.menu.ThemeManager;
@@ -106,7 +109,36 @@ public class Launcher {
                 startAndReveal, dockerManager::stop, translations);
         TutorialManager tutorialManager = new TutorialManager(frame, translations);
 
+        UtilitiesPanel utilitiesPanel = new UtilitiesPanel(Launcher::openInBrowser, translations);
+
+        // A service is listed beside the tabs exactly while it is one the student has
+        // chosen, which is the same thing its tab and its tick say. The panel is told
+        // what was chosen rather than working it out, and it alone decides when a
+        // service that is on its way out stops being shown.
+        databases.forEach(database ->
+                servicesPanel.setChosen(database.key(), tabs.isShown(database)));
+        tabs.addVisibilityListener(
+                (database, shown) -> servicesPanel.setChosen(database.key(), shown));
+
+        // The utilities belong to whichever tab is in front rather than to the window, so
+        // they follow the tab rather than what has been chosen.
+        tabs.addFrontTabListener(utilitiesPanel::setFrontTab);
+
+        // What the student is looking at is what they mean to use. Bringing a tab to the
+        // front starts its service if it is not running, so that a database they clicked
+        // on is one they can type into. Nothing is started while something is already
+        // happening to it: clicking about during a ten-minute image pull must not queue
+        // commands against a service that is busy.
+        Map<Database, ServiceStatus> lastKnown = new EnumMap<>(Database.class);
+        tabs.addActivationListener(database -> {
+            ServiceStatus status = lastKnown.getOrDefault(database, ServiceStatus.STOPPED);
+            if (!status.isWaiting() && !status.isUp()) {
+                dockerManager.start(database.key());
+            }
+        });
+
         dockerManager.setListener((key, status) -> {
+            lastKnown.put(Database.fromKey(key), status);
             servicesPanel.updateStatus(key, status);
             tabs.setSendEnabled(key, status == ServiceStatus.HEALTHY);
             // The console comes back as soon as the download is over, whichever way it
@@ -127,7 +159,8 @@ public class Launcher {
         frame.setJMenuBar(buildMenuBar(frame, themeManager, fontManager, languageManager,
                 translations, tabs,
                 dockerManager, servicesPanel, tutorialManager, preferences));
-        frame.setContentPane(buildContentPane(tabs.getComponent(), servicesPanel));
+        frame.setContentPane(buildContentPane(tabs.getComponent(), servicesPanel,
+                utilitiesPanel));
         frame.setSize(startingSize(frame));
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
@@ -163,7 +196,11 @@ public class Launcher {
             TutorialManager tutorialManager, Preferences preferences) {
         JMenuBar menuBar = new JMenuBar();
         menuBar.add(FileMenu.build(translations));
-        var servicesMenu = DatabasesMenu.build(tabs, dockerManager::start, dockerManager::stop, translations);
+        // Unticking is a student saying they are finished with a service, so it gives the
+        // disk back as well as stopping it. The button beside the service only stops it:
+        // that one keeps their place, and coming back to it should not be a download.
+        var servicesMenu = DatabasesMenu.build(tabs, dockerManager::start,
+                dockerManager::stopAndDiscardImage, translations);
         menuBar.add(servicesMenu);
         menuBar.add(ZoomMenu.build(frame, preferences, translations, tabs::applyZoom));
         // The indicators take their colours from the theme's palette, so the panel has
@@ -177,20 +214,47 @@ public class Launcher {
         menuBar.add(LanguageMenu.build(translations, languageManager));
         menuBar.add(TutorialMenu.build(() -> tutorialManager.show(
                 servicesPanel.getComponent(), servicesPanel.actionButtonFor(Database.MONGO.key()),
-                servicesMenu, tabs.notebooksButton()), translations));
+                servicesMenu), translations));
         menuBar.add(HelpMenu.build(frame, translations));
         return menuBar;
     }
 
-    private static JPanel buildContentPane(JTabbedPane tabbedPane, ServicesPanel servicesPanel) {
+    private static JPanel buildContentPane(JTabbedPane tabbedPane, ServicesPanel servicesPanel,
+            UtilitiesPanel utilitiesPanel) {
+        // The utilities sit under the services in their own box, and the box takes no
+        // room at all while there is nothing in it to offer.
+        JPanel besideTheTabs = new JPanel(new BorderLayout(CONTENT_GAP, CONTENT_GAP));
+        besideTheTabs.add(servicesPanel.getComponent(), BorderLayout.NORTH);
+        besideTheTabs.add(utilitiesPanel.getComponent(), BorderLayout.CENTER);
+
         JPanel rightPanel = new JPanel(new BorderLayout());
-        rightPanel.add(servicesPanel.getComponent(), BorderLayout.NORTH);
+        rightPanel.add(besideTheTabs, BorderLayout.NORTH);
 
         JPanel contentPane = new JPanel(new BorderLayout(CONTENT_GAP, CONTENT_GAP));
         contentPane.setBorder(BorderFactory.createEmptyBorder(CONTENT_GAP, CONTENT_GAP, CONTENT_GAP, CONTENT_GAP));
         contentPane.add(tabbedPane, BorderLayout.CENTER);
         contentPane.add(rightPanel, BorderLayout.EAST);
         return contentPane;
+    }
+
+    /**
+     * Opens a URL in whatever browser the machine uses.
+     *
+     * <p>
+     * Every service publishes its ports on this machine, so these all answer on
+     * localhost. A machine with no browser it can reach from Java is left alone rather
+     * than told about it: nothing the student did has failed, and the address is one they
+     * can type themselves.
+     */
+    private static void openInBrowser(String url) {
+        try {
+            if (Desktop.isDesktopSupported()
+                    && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+                Desktop.getDesktop().browse(URI.create(url));
+            }
+        } catch (Exception ignored) {
+            // Nothing useful to say: the service is running either way.
+        }
     }
 
     private static void openJupyter(Translations translations) {

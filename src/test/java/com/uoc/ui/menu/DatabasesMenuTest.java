@@ -99,7 +99,11 @@ class DatabasesMenuTest {
     @Test
     void tickingTheNotebooksBringsThemToTheFrontToo() throws Exception {
         // Jupyter has no console behind its tab, so it is the one that has to reach the
-        // front by a different route than the databases.
+        // front by a different route than the databases. It now opens with the course,
+        // so it has to be put away first for ticking it to be what brings it back.
+        onSwing(() -> itemFor(Database.JUPYTER).doClick());
+        assertThat(tabs.isShown(Database.JUPYTER)).isFalse();
+
         onSwing(() -> itemFor(Database.JUPYTER).doClick());
 
         assertThat(tabs.isShown(Database.JUPYTER)).isTrue();

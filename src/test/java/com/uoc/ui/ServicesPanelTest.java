@@ -38,6 +38,11 @@ class ServicesPanelTest {
         panel = new ServicesPanel(List.of(Database.values()), key -> {
         }, key -> {
         }, translations);
+        // A panel lists what the student chose, and a new one has been told nothing yet.
+        // The tests below are about what a row says, so every service is chosen here.
+        for (Database database : Database.values()) {
+            panel.setChosen(database.key(), true);
+        }
     }
 
     private String statusTextOf(Database database) {

@@ -33,6 +33,37 @@ public class DatabaseTabs {
     }
 
     /**
+     * Told when a student brings a tab to the front themselves, which is how they say
+     * they want to work with that database now.
+     *
+     * <p>
+     * Only their own doing counts. Opening, closing and reordering tabs all move the
+     * selection about as a side effect -- closing the front tab hands the front to
+     * whichever tab is next along -- and a service must not be started because its
+     * neighbour was put away.
+     */
+    public interface ActivationListener {
+        void onActivated(Database database);
+    }
+
+    /**
+     * Told which tab is at the front, whoever put it there.
+     *
+     * <p>
+     * Not the same question as {@link ActivationListener}, which asks what the student
+     * just did and so ignores the launcher's own moving about. This asks what is on
+     * screen now, which is true however it came to be: opening a tab, closing the one in
+     * front of it, or clicking. What is offered alongside a database has to follow the
+     * tab a student is actually looking at.
+     *
+     * @param database the service whose tab is at the front, or {@code null} when no tab
+     *                 is showing at all
+     */
+    public interface FrontTabListener {
+        void onFrontTabChanged(Database database);
+    }
+
+    /**
      * The longer side of a tab's icon. The label beside it is what names the
      * service.
      */
@@ -50,6 +81,14 @@ public class DatabaseTabs {
     private final Map<Database, FlatSVGIcon> icons = new LinkedHashMap<>();
     private final JTabbedPane tabbedPane = new JTabbedPane();
     private final List<VisibilityListener> visibilityListeners = new ArrayList<>();
+    private final List<ActivationListener> activationListeners = new ArrayList<>();
+    private final List<FrontTabListener> frontTabListeners = new ArrayList<>();
+
+    /**
+     * Set while this class is adding or removing a tab itself, so that the selection
+     * moving as a consequence is not mistaken for a student picking a tab.
+     */
+    private boolean rearranging;
 
     // There is one of these, and it lives here with every other tab. It used to be
     // built
@@ -105,6 +144,24 @@ public class DatabaseTabs {
 
         layOutTabsInOneRow();
 
+        tabbedPane.addChangeListener(event -> {
+            Database front = frontTab();
+            frontTabListeners.forEach(listener -> listener.onFrontTabChanged(front));
+            if (!rearranging && front != null) {
+                activationListeners.forEach(listener -> listener.onActivated(front));
+            }
+        });
+    }
+
+    /** Which database the tab at the front belongs to, or null if no tab is showing. */
+    public Database frontTab() {
+        java.awt.Component front = tabbedPane.getSelectedComponent();
+        for (var entry : panels.entrySet()) {
+            if (entry.getValue() == front) {
+                return entry.getKey();
+            }
+        }
+        return null;
     }
 
     /**
@@ -171,7 +228,7 @@ public class DatabaseTabs {
         return tabbedPane;
     }
 
-    /** The button that opens the notebooks, which the tutorial points at. */
+    /** The button that opens the notebooks. */
     public JButton notebooksButton() {
         return notebooks.getOpenButton();
     }
@@ -280,6 +337,16 @@ public class DatabaseTabs {
         visibilityListeners.add(listener);
     }
 
+    public void addActivationListener(ActivationListener listener) {
+        activationListeners.add(listener);
+    }
+
+    /** Told at once which tab is at the front, and again whenever that changes. */
+    public void addFrontTabListener(FrontTabListener listener) {
+        frontTabListeners.add(listener);
+        listener.onFrontTabChanged(frontTab());
+    }
+
     public boolean isShown(Database database) {
         return tabbedPane.indexOfComponent(panels.get(database)) >= 0;
     }
@@ -288,8 +355,8 @@ public class DatabaseTabs {
         if (isShown(database)) {
             return;
         }
-        tabbedPane.insertTab(database.displayName(), icons.get(database),
-                panels.get(database), null, indexFor(database));
+        rearranged(() -> tabbedPane.insertTab(database.displayName(), icons.get(database),
+                panels.get(database), null, indexFor(database)));
         announce(database, true);
     }
 
@@ -297,14 +364,31 @@ public class DatabaseTabs {
         if (!isShown(database)) {
             return;
         }
-        tabbedPane.remove(panels.get(database));
+        rearranged(() -> tabbedPane.remove(panels.get(database)));
         announce(database, false);
     }
 
     /** Brings a tab to the front. The tab has to be showing for there to be one. */
     public void select(Database database) {
         if (isShown(database)) {
-            tabbedPane.setSelectedComponent(panels.get(database));
+            rearranged(() -> tabbedPane.setSelectedComponent(panels.get(database)));
+        }
+    }
+
+    /**
+     * Moves the tabs about without any of it counting as a student picking one.
+     *
+     * <p>
+     * Removing the tab at the front hands the front to its neighbour, and inserting one
+     * before the front tab shifts it: both arrive as the same event as a click on the tab
+     * strip. Taken at face value, putting Redis away would start whatever sat next to it.
+     */
+    private void rearranged(Runnable change) {
+        rearranging = true;
+        try {
+            change.run();
+        } finally {
+            rearranging = false;
         }
     }
 

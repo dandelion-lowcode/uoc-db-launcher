@@ -131,14 +131,16 @@ public enum Database {
      * Whether a tab opens on this the first time the launcher is run.
      *
      * <p>
-     * Which is the three the course works through, and follows from the group
-     * rather than
-     * being said twice. After that first run it is the student's own choice that
-     * decides,
-     * which is remembered.
+     * The three the course works through, and the notebooks they are worked through in.
+     * It follows from the group rather than being said twice. After that first run it is
+     * the student's own choice that decides, which is remembered.
+     *
+     * <p>
+     * Opening a tab is not starting a service: nothing is started until the student asks
+     * for it. This says which services are theirs to hand, not which are running.
      */
     public boolean isShownByDefault() {
-        return group == Group.GENERAL;
+        return group == Group.GENERAL || group == Group.JUPYTER;
     }
 
     public String iconResource() {
