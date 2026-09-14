@@ -65,6 +65,41 @@ public class Launcher {
     private static final int WINDOW_HEIGHT = 720;
     private static final int CONTENT_GAP = 10;
 
+    /**
+     * The sizes the window's icon is drawn at, which are the ones Windows asks for: the
+     * taskbar and the title bar take the small end, Alt-Tab and the task view the large.
+     */
+    private static final int[] ICON_SIZES = { 16, 20, 24, 32, 48, 64, 128, 256 };
+
+    /**
+     * The application's icon, drawn once per size.
+     *
+     * <p>
+     * One image will not do, and not for the reason it usually does not. FlatSVGIcon
+     * hands back a multi-resolution image -- one object that knows how to produce
+     * whichever size is asked of it -- and the Windows side of AWT does not ask: it takes
+     * the first variant it finds and reads a corner of it the size of the icon it wanted.
+     * The taskbar showed the top-left of the drawing, blown up: a U, an O, and the lid of
+     * the database.
+     *
+     * <p>
+     * Ordinary images, one per size, leave nothing to work out. Each is drawn from the
+     * vector at its own size rather than shrunk from a larger one, which is the same rule
+     * the packaging icons are built by.
+     */
+    static List<java.awt.Image> appIcons() {
+        List<java.awt.Image> icons = new java.util.ArrayList<>();
+        for (int size : ICON_SIZES) {
+            java.awt.image.BufferedImage image = new java.awt.image.BufferedImage(
+                    size, size, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+            java.awt.Graphics2D g = image.createGraphics();
+            new FlatSVGIcon(APP_ICON, size, size).paintIcon(null, g, 0, 0);
+            g.dispose();
+            icons.add(image);
+        }
+        return icons;
+    }
+
     public static void main(String[] args) {
         Preferences preferences = Preferences.userNodeForPackage(Launcher.class);
         // What was chosen last time, or -- only on the first run on this machine -- what
@@ -92,7 +127,7 @@ public class Launcher {
             Translations translations, Preferences preferences) {
         JFrame frame = new JFrame();
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.setIconImage(new FlatSVGIcon(APP_ICON).getImage());
+        frame.setIconImages(appIcons());
         translations.register(() -> frame.setTitle(translations.get(Message.APP_TITLE)));
 
         List<Database> databases = List.of(Database.values());
