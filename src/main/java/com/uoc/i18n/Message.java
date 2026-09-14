@@ -87,6 +87,8 @@ public enum Message {
     TOOLTIP_STOP("tooltip.stop"),
     DIALOG_DOCKER_MISSING_TITLE("dialog.dockerMissing.title"),
     DIALOG_DOCKER_MISSING_MESSAGE("dialog.dockerMissing.message"),
+    DIALOG_DOCKER_NOT_FOUND_TITLE("dialog.dockerNotFound.title"),
+    DIALOG_DOCKER_NOT_FOUND_MESSAGE("dialog.dockerNotFound.message"),
     ABOUT_TEXT("about.text");
 
     private final String key;

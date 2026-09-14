@@ -77,8 +77,9 @@ public class Launcher {
         themeManager.applySavedTheme();
         ConsoleFontManager fontManager = new ConsoleFontManager(preferences);
 
-        if (!DockerAvailability.isRunning()) {
-            DockerAvailability.showMissingDialog(translations);
+        DockerAvailability.Status docker = DockerAvailability.status();
+        if (docker != DockerAvailability.Status.RUNNING) {
+            DockerAvailability.showMissingDialog(translations, docker);
             System.exit(1);
         }
         SwingUtilities.invokeLater(

@@ -171,6 +171,13 @@ class SystemProcessRunnerTest {
 
         assertThat(result.failed()).isTrue();
         assertThat(result.output()).isNotBlank();
+
+        // And negative, which is how Result says "could not be run" as opposed to "ran
+        // and failed". DockerAvailability reads exactly this to tell a machine with no
+        // docker on its PATH from one with Docker merely closed, and the two want
+        // opposite things of the student. A positive code here would leave that reading
+        // wrong without a word from any other test.
+        assertThat(result.exitCode()).isNegative();
     }
 
     @Test
