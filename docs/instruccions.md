@@ -88,7 +88,7 @@ Per solucionar-ho:
 >
 > ![](images/troubleshooting-img-5.png)
 >
-> Si el preferiu al llançador, desfeu els canvis; si necessiteu tots dos, VirtualBox 6 i posteriors funcionen **sobre** Hyper-V, encara que de manera menys eficient (i amb màquines virtuals que no hagin estat creades amb Hyper-V desactivat).
+> Si el preferiu al llançador, desfeu els canvis; si necessiteu tots dos, VirtualBox 6 i posteriors funcionen **sobre** Hyper-V, encara que de manera menys eficient (i amb màquines virtuals noves, creades després d’activar Hyper-V).
 
 :::pagebreak
 
