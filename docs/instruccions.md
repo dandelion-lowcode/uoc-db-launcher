@@ -84,11 +84,11 @@ Per solucionar-ho:
 :::
 
 > [!WARNING] Docker i VirtualBox poden no conviure
-> Aplicar aquest procediment fa que Docker funcioni, però **és possible que altres aplicacions de virtualització deixin de fer-ho**: el processador presta les extensions de virtualització a un sol programa alhora, i Hyper-V les reclama en arrencar Windows. Amb VirtualBox, per exemple, el símptoma és aquest error en obrir una màquina virtual:
+> Aplicar aquest procediment fa que Docker funcioni, però **és possible que altres aplicacions de virtualització deixin de fer-ho**: el processador presta les extensions de virtualització a un sol programa alhora, i Hyper-V les reclama en arrencar Windows. Amb VirtualBox, per exemple, màquines virtuals creades prèviament a l’activació de Hyper-V (és a dir, amb Hyper-V desactivat) poden mostrar el següent error en arrencar:
 >
 > ![](images/troubleshooting-img-5.png)
 >
-> Si el preferiu al llançador, desfeu els canvis; si necessiteu tots dos, VirtualBox 6 i posteriors funcionen **sobre** Hyper-V, encara que de manera menys eficient.
+> Si el preferiu al llançador, desfeu els canvis; si necessiteu tots dos, VirtualBox 6 i posteriors funcionen **sobre** Hyper-V, encara que de manera menys eficient (i amb màquines virtuals noves, creades després d’activar Hyper-V).
 
 :::pagebreak
 
